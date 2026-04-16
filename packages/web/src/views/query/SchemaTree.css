@@ -1,40 +1,142 @@
-.schema-tree {
-  padding: var(--space-2);
+.catalog {
+  padding: var(--s-3) var(--s-2);
 }
-.schema-head {
-  padding: var(--space-2) var(--space-3);
-  font-weight: 600;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--color-text-muted);
+
+.catalog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--s-2) var(--s-2);
 }
+
+.catalog-count {
+  font-size: 10px;
+  color: var(--rust-400);
+  letter-spacing: 0.1em;
+}
+
+.catalog-rule {
+  height: 1px;
+  background: linear-gradient(90deg, var(--rust-500), transparent);
+  margin: 0 var(--s-2) var(--s-2);
+  opacity: 0.5;
+}
+
 .tree-list {
   list-style: none;
   padding: 0;
   margin: 0;
 }
+
 .tree-nested {
-  padding-left: var(--space-3);
+  padding-left: var(--s-4);
+  margin-top: 2px;
+  border-left: 1px dashed var(--color-border);
+  margin-left: 14px;
 }
+
+.tree-cols {
+  padding-left: var(--s-4);
+  margin-top: 2px;
+  margin-left: 10px;
+  border-left: 1px dashed var(--color-border);
+}
+
 .tree-row {
   display: flex;
-  gap: var(--space-2);
+  gap: var(--s-2);
   align-items: center;
   width: 100%;
   background: transparent;
   border: none;
   color: var(--color-text);
-  padding: 4px 8px;
+  padding: 4px 6px;
   text-align: left;
-  font-size: 13px;
-  border-radius: var(--radius-1);
-}
-.tree-row:hover {
-  background: var(--color-surface-2);
-}
-.tree-col {
-  padding: 2px 8px 2px 24px;
-  font-size: 12px;
   font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  border-radius: var(--r-1);
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.tree-row:hover {
+  background: var(--ink-700);
+  color: var(--color-text-strong);
+}
+
+.tree-row.is-open {
+  color: var(--color-text-strong);
+}
+
+.tree-db-row.is-open .tree-kind,
+.tree-db-row.is-open .tree-idx {
+  color: var(--rust-400);
+}
+
+.tree-caret {
+  width: 8px;
+  color: var(--color-text-dim);
+  font-size: 9px;
+}
+
+.tree-idx {
+  font-size: 9px;
+  color: var(--color-text-dim);
+  letter-spacing: 0.05em;
+  font-variant-numeric: tabular-nums;
+  width: 16px;
+}
+
+.tree-kind {
+  color: var(--bone-400);
+  font-size: 11px;
+  width: 12px;
+  text-align: center;
+}
+
+.tree-kind-tbl {
+  color: var(--blueprint-500);
+}
+
+.tree-name {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+}
+
+.tree-col {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 2px var(--s-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.tree-col-rule {
+  width: 10px;
+  height: 1px;
+  background: var(--color-border);
+  flex-shrink: 0;
+  align-self: center;
+  margin-left: -12px;
+}
+
+.tree-col-name {
+  flex: 1;
+  min-width: 0;
+  color: var(--bone-200);
+}
+
+.tree-col-type {
+  color: var(--amber-500);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+  margin-left: auto;
+  opacity: 0.85;
 }

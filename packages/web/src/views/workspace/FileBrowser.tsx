@@ -1,4 +1,4 @@
-import type { S3Listing } from "@athena-shell/shared";
+import type { S3Folder, S3Listing, S3Object } from "@athena-shell/shared";
 
 import { EmptyState } from "../../components/EmptyState";
 import { LoadingSpinner } from "../../components/LoadingSpinner";
@@ -15,59 +15,108 @@ interface Props {
 }
 
 export function FileBrowser({ listing, onOpen, onDelete, onDownload }: Props) {
-  if (!listing) return <LoadingSpinner label="Loading…" />;
-  const isEmpty = listing.folders.length === 0 && listing.objects.length === 0;
-  if (isEmpty) {
+  if (!listing) return <LoadingSpinner label="listing" />;
+  const total = listing.folders.length + listing.objects.length;
+  if (total === 0) {
     return (
       <EmptyState
-        icon="📁"
-        title="This folder is empty"
-        hint="Drop files here to upload."
+        icon="∅"
+        title="This prefix is empty."
+        hint="Drop files onto the zone above, or create a sub-folder to organize."
       />
     );
   }
   return (
-    <div className="file-browser">
-      <div className="fb-row fb-head text-muted text-sm">
-        <span>Name</span>
-        <span>Size</span>
-        <span>Modified</span>
-        <span />
+    <div className="fb">
+      <Banner
+        total={total}
+        folders={listing.folders.length}
+        files={listing.objects.length}
+      />
+      <div className="fb-grid">
+        <HeadRow />
+        {listing.folders.map((f) => (
+          <FolderRow key={f.key} folder={f} onOpen={onOpen} />
+        ))}
+        {listing.objects.map((o) => (
+          <FileRow key={o.key} obj={o} onDownload={onDownload} onDelete={onDelete} />
+        ))}
       </div>
-      {listing.folders.map((f) => (
-        <button key={f.key} className="fb-row fb-clickable" onClick={() => onOpen(f.key)}>
-          <span className="flex-row gap-2">
-            <span>📁</span>
-            <span className="truncate">{f.name}/</span>
-          </span>
-          <span className="text-muted text-sm">—</span>
-          <span className="text-muted text-sm">—</span>
-          <span />
+    </div>
+  );
+}
+
+function Banner({ total, folders, files }: { total: number; folders: number; files: number }) {
+  return (
+    <div className="fb-banner flex-row gap-3">
+      <span className="tracked">Objects</span>
+      <span className="tok">{String(total).padStart(3, "0")} · items</span>
+      <span className="fb-banner-rule" aria-hidden />
+      <span className="tracked text-dim">
+        <span className="mono">{folders}</span> folders
+        <span className="fb-banner-dot" aria-hidden>·</span>
+        <span className="mono">{files}</span> files
+      </span>
+    </div>
+  );
+}
+
+function HeadRow() {
+  return (
+    <div className="fb-row fb-head">
+      <span className="tracked">name</span>
+      <span className="tracked text-right">size</span>
+      <span className="tracked">modified</span>
+      <span />
+    </div>
+  );
+}
+
+function FolderRow({ folder, onOpen }: { folder: S3Folder; onOpen: (p: string) => void }) {
+  return (
+    <button className="fb-row fb-clickable fb-folder" onClick={() => onOpen(folder.key)}>
+      <span className="fb-name">
+        <span className="ftype ftype-dir" aria-hidden>▤</span>
+        <span className="truncate fb-name-text">{folder.name}/</span>
+      </span>
+      <span className="text-dim mono text-right">—</span>
+      <span className="text-dim mono">—</span>
+      <span className="fb-actions fb-actions-folder">
+        <span className="fb-open-hint tracked">open →</span>
+      </span>
+    </button>
+  );
+}
+
+interface FileRowProps {
+  obj: S3Object;
+  onDownload: (key: string, name: string) => void | Promise<void>;
+  onDelete: (key: string) => void | Promise<void>;
+}
+
+function FileRow({ obj, onDownload, onDelete }: FileRowProps) {
+  const type = fileTypeIcon(obj.name);
+  return (
+    <div className="fb-row fb-file">
+      <span className="fb-name">
+        <span className={`ftype ftype-${type.kind}`} aria-hidden>{type.code}</span>
+        <span className="truncate fb-name-text">{obj.name}</span>
+      </span>
+      <span className="mono text-right tnum fb-size">{formatBytes(obj.size)}</span>
+      <span className="mono tnum text-muted fb-date">{formatDate(obj.lastModified)}</span>
+      <span className="fb-actions flex-row gap-1">
+        <button className="btn btn-ghost fb-action" onClick={() => onDownload(obj.key, obj.name)}>
+          ↓ get
         </button>
-      ))}
-      {listing.objects.map((o) => (
-        <div key={o.key} className="fb-row">
-          <span className="flex-row gap-2 truncate">
-            <span>{fileTypeIcon(o.name)}</span>
-            <span className="truncate">{o.name}</span>
-          </span>
-          <span className="text-muted text-sm">{formatBytes(o.size)}</span>
-          <span className="text-muted text-sm">{formatDate(o.lastModified)}</span>
-          <span className="flex-row gap-1">
-            <button className="btn btn-ghost" onClick={() => onDownload(o.key, o.name)}>
-              Download
-            </button>
-            <button
-              className="btn btn-ghost"
-              onClick={() => {
-                if (confirm(`Delete ${o.name}?`)) onDelete(o.key);
-              }}
-            >
-              Delete
-            </button>
-          </span>
-        </div>
-      ))}
+        <button
+          className="btn btn-ghost fb-action fb-action-danger"
+          onClick={() => {
+            if (confirm(`Delete ${obj.name}?`)) onDelete(obj.key);
+          }}
+        >
+          ✕ del
+        </button>
+      </span>
     </div>
   );
 }

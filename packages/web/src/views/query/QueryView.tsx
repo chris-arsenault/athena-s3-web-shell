@@ -6,6 +6,7 @@ import { useAuth } from "../../auth/authContext";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { LoadingSpinner } from "../../components/LoadingSpinner";
 import { stopQuery } from "../../data/queryRepo";
+import { SchemaProvider } from "../../data/schemaContext";
 import { HistoryPanel } from "./HistoryPanel";
 import { QueryToolbar } from "./QueryToolbar";
 import { ResultsTable } from "./ResultsTable";
@@ -15,6 +16,14 @@ import { useQueryRunner } from "./useQueryRunner";
 import "./QueryView.css";
 
 export function QueryView() {
+  return (
+    <SchemaProvider>
+      <QueryViewInner />
+    </SchemaProvider>
+  );
+}
+
+function QueryViewInner() {
   const { provider, context, loading } = useAuth();
   const [sql, setSql] = useState("SELECT 1 AS hello");
   const [status, setStatus] = useState<QueryStatus | null>(null);
@@ -39,7 +48,7 @@ export function QueryView() {
     await stopQuery(provider, status.executionId);
   }, [provider, status]);
 
-  if (loading || !context) return <LoadingSpinner label="Loading query workspace…" />;
+  if (loading || !context) return <LoadingSpinner label="query workspace" />;
 
   return (
     <div className="query-view flex-row flex-1">

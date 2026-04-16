@@ -6,12 +6,29 @@ interface EmptyStateProps {
   hint?: string;
 }
 
-export function EmptyState({ icon = "∅", title, hint }: EmptyStateProps) {
+export function EmptyState({ icon, title, hint }: EmptyStateProps) {
   return (
-    <div className="empty-state flex-col gap-2">
-      <div className="empty-icon">{icon}</div>
-      <div className="empty-title">{title}</div>
-      {hint && <div className="empty-hint text-muted text-sm">{hint}</div>}
+    <div className="empty-wrap">
+      <div className="empty reg flex-col gap-3">
+        <div className="empty-header tracked">
+          <span>idle</span>
+          <span className="empty-rule" aria-hidden />
+          <span className="mono">no data</span>
+        </div>
+        {icon && (
+          <div className="empty-glyph" aria-hidden>
+            <span className="empty-bracket">&#x2039;</span>
+            <span className="empty-icon">{icon}</span>
+            <span className="empty-bracket">&#x203A;</span>
+          </div>
+        )}
+        <div className="empty-title serif">{title}</div>
+        {hint && <div className="empty-hint mono text-muted">{hint}</div>}
+        <div className="empty-foot tracked">
+          <span>stand by</span>
+          <span className="empty-blink" aria-hidden>_</span>
+        </div>
+      </div>
     </div>
   );
 }

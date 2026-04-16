@@ -1,23 +1,158 @@
-.query-toolbar {
+.qbar {
+  position: relative;
   align-items: center;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--s-3) var(--s-4);
   border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface);
+  background:
+    linear-gradient(180deg, var(--ink-800) 0%, var(--ink-750) 100%);
+  min-height: 56px;
+  overflow: hidden;
+  flex-shrink: 0;
 }
-.query-status {
-  font-size: 12px;
+
+.qbar-slot {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  color: var(--color-text-dim);
+  line-height: 1;
+}
+
+.qbar-slot-label {
+  font-size: 9px;
+  letter-spacing: 0.15em;
+}
+
+.qbar-sep {
+  width: 1px;
+  height: 24px;
+  background: var(--color-border);
+  margin: 0 var(--s-1);
+}
+
+/* ── RUN button — the hero ──────────────────────────────────── */
+.qbtn-run {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 8px 14px 8px 12px;
+  background: var(--rust-500);
+  color: var(--bone-100);
+  border: 1px solid var(--rust-500);
+  border-radius: var(--r-1);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--color-text-muted);
+  letter-spacing: 0.18em;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-snap);
+  box-shadow:
+    0 0 0 1px var(--rust-600) inset,
+    0 10px 24px -10px rgba(192, 88, 58, 0.55);
+  position: relative;
 }
-.query-status.status-running,
-.query-status.status-queued {
-  color: var(--color-warn);
+
+.qbtn-run:hover:not(:disabled) {
+  background: var(--rust-400);
+  border-color: var(--rust-400);
+  box-shadow:
+    0 0 0 1px var(--rust-300) inset,
+    0 0 24px -4px rgba(216, 113, 78, 0.65);
 }
-.query-status.status-succeeded {
-  color: var(--color-success);
+
+.qbtn-run:active:not(:disabled) {
+  transform: translateY(1px);
 }
-.query-status.status-failed,
-.query-status.status-cancelled {
-  color: var(--color-danger);
+
+.qbtn-run:disabled {
+  background: var(--rust-700);
+  border-color: var(--rust-700);
+  color: rgba(244, 239, 228, 0.7);
+  cursor: not-allowed;
+  box-shadow: 0 0 0 1px var(--rust-700) inset;
+}
+
+.qbtn-run-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  font-size: 10px;
+}
+
+.qbtn-run-label {
+  line-height: 1;
+}
+
+.qbtn-run-kbd {
+  background: rgba(0, 0, 0, 0.35);
+  border-color: rgba(244, 239, 228, 0.25);
+  color: var(--bone-200);
+  letter-spacing: 0.1em;
+}
+
+/* running-state spinner inside run button */
+.qbtn-spin {
+  display: inline-flex;
+  gap: 2px;
+  align-items: flex-end;
+  height: 10px;
+}
+
+.qbtn-spin span {
+  display: block;
+  width: 2px;
+  height: 100%;
+  background: var(--bone-100);
+  transform-origin: bottom center;
+  animation: bar-bounce 0.9s var(--ease-out) infinite;
+}
+
+.qbtn-spin span:nth-child(2) { animation-delay: 130ms; }
+.qbtn-spin span:nth-child(3) { animation-delay: 260ms; }
+
+/* stop / abort */
+.qbtn-stop {
+  padding: 8px 12px;
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+}
+
+/* ── status readout ─────────────────────────────────────────── */
+.qbar-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.qbar-status-label {
+  color: var(--color-text-dim);
+}
+
+/* ── sweep animation while running ──────────────────────────── */
+.qbar-sweep {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 30%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(216, 113, 78, 0.2) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(-100%);
+}
+
+.qbar.is-running .qbar-sweep {
+  opacity: 1;
+  animation: sweep 2.2s linear infinite;
 }

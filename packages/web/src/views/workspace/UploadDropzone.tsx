@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { useAuth } from "../../auth/authContext";
 import { useDropzone, type DroppedFile } from "../../hooks/useDropzone";
 import { classNames } from "../../utils/classNames";
 import "./UploadDropzone.css";
@@ -10,75 +11,113 @@ interface Props {
 }
 
 export function UploadDropzone({ onFiles, onCreateFolder }: Props) {
+  const { context } = useAuth();
   const { active, dropzoneProps } = useDropzone(onFiles);
-  const [creating, setCreating] = useState(false);
-  const [folderName, setFolderName] = useState("");
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  useEffect(() => {
-    if (creating) inputRef.current?.focus();
-  }, [creating]);
-
   return (
-    <div
-      {...dropzoneProps}
-      className={classNames("dropzone", { "dropzone-active": active })}
-    >
-      <div className="dropzone-msg flex-col gap-1">
-        <span className="dropzone-icon">📥</span>
-        <span>Drop files or folders here to upload</span>
-        <span className="text-muted text-sm">
-          Files upload directly to your personal S3 prefix.
-        </span>
-      </div>
-      <div className="dropzone-actions flex-row gap-2 ml-auto">
-        <label className="btn btn-secondary cursor-pointer">
-          Choose files
-          <input
-            type="file"
-            multiple
-            className="visually-hidden"
-            onChange={(e) => {
-              const files = Array.from(e.target.files ?? []).map((f) => ({
-                file: f,
-                relativePath: f.name,
-              }));
-              if (files.length > 0) onFiles(files);
-              e.target.value = "";
-            }}
-          />
-        </label>
-        {creating ? (
-          <form
-            className="flex-row gap-1"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (!folderName.trim()) return;
-              onCreateFolder(folderName.trim()).finally(() => {
-                setCreating(false);
-                setFolderName("");
-              });
-            }}
-          >
-            <input
-              ref={inputRef}
-              className="input"
-              value={folderName}
-              onChange={(e) => setFolderName(e.target.value)}
-              placeholder="folder name"
-            />
-            <button className="btn" type="submit">
-              Create
-            </button>
-            <button className="btn btn-ghost" type="button" onClick={() => setCreating(false)}>
-              Cancel
-            </button>
-          </form>
-        ) : (
-          <button className="btn btn-secondary" onClick={() => setCreating(true)}>
-            New folder
-          </button>
-        )}
+    <div {...dropzoneProps} className={classNames("drop", { "drop-active": active })}>
+      <div className="drop-sweep" aria-hidden />
+      <div className="drop-core flex-row">
+        <DropBanner
+          bucket={context?.s3.bucket ?? "—"}
+          prefix={context?.s3.prefix ?? "—"}
+        />
+        <DropActions onFiles={onFiles} onCreateFolder={onCreateFolder} />
       </div>
     </div>
+  );
+}
+
+function DropBanner({ bucket, prefix }: { bucket: string; prefix: string }) {
+  return (
+    <div className="drop-msg flex-col gap-1">
+      <div className="drop-head flex-row gap-2">
+        <span className="tok tok-accent">ingress</span>
+        <span className="tracked drop-head-label">drop · paste · select</span>
+      </div>
+      <div className="drop-title">
+        <span className="serif">Deposit files</span>
+        <span className="drop-arrow" aria-hidden>→</span>
+      </div>
+      <div className="drop-target mono">
+        <span className="text-dim">s3://</span>
+        <span className="drop-bucket">{bucket}</span>
+        <span className="text-dim">/</span>
+        <span className="drop-prefix truncate">{prefix}</span>
+      </div>
+    </div>
+  );
+}
+
+interface DropActionsProps {
+  onFiles: (files: DroppedFile[]) => void;
+  onCreateFolder: (name: string) => Promise<void>;
+}
+
+function DropActions({ onFiles, onCreateFolder }: DropActionsProps) {
+  const [creating, setCreating] = useState(false);
+  return (
+    <div className="drop-actions flex-row gap-2 ml-auto">
+      <label className="btn btn-secondary cursor-pointer">
+        <span>select files</span>
+        <input
+          type="file"
+          multiple
+          className="visually-hidden"
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []).map((f) => ({
+              file: f,
+              relativePath: f.name,
+            }));
+            if (files.length > 0) onFiles(files);
+            e.target.value = "";
+          }}
+        />
+      </label>
+      {creating ? (
+        <NewFolderForm
+          onSubmit={onCreateFolder}
+          onClose={() => setCreating(false)}
+        />
+      ) : (
+        <button className="btn" onClick={() => setCreating(true)}>
+          <span aria-hidden>+</span>
+          <span>new folder</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+interface NewFolderFormProps {
+  onSubmit: (name: string) => Promise<void>;
+  onClose: () => void;
+}
+
+function NewFolderForm({ onSubmit, onClose }: NewFolderFormProps) {
+  const [name, setName] = useState("");
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+  return (
+    <form
+      className="flex-row gap-1"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const trimmed = name.trim();
+        if (!trimmed) return;
+        onSubmit(trimmed).finally(onClose);
+      }}
+    >
+      <input
+        ref={inputRef}
+        className="input"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="folder name"
+      />
+      <button className="btn btn-primary" type="submit">create</button>
+      <button className="btn btn-ghost" type="button" onClick={onClose}>cancel</button>
+    </form>
   );
 }

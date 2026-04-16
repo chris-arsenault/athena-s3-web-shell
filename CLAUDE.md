@@ -71,8 +71,13 @@ Naming:
 Styling:
 - Plain CSS only, co-located per component
 - No inline styles, no CSS modules, no styled-components
-- CSS custom properties for theming (`src/index.css` defines all `--color-*` and `--space-*` vars)
-- Utility classes for layout: `.flex-row`, `.flex-col`, `.gap-2`, `.ml-auto`, `.text-muted` etc. Defined in `src/index.css`
+- CSS custom properties for theming — `src/index.css` defines the full token system:
+  - **Palette** (raw): `--ink-900..500` (surfaces), `--bone-100..500` (text), `--rust-300..700` (brand/action), `--phosphor-400..600` (live/success), `--amber-400..500`, `--crimson-500..600`, `--blueprint-400..600`
+  - **Semantic aliases**: `--color-bg`, `--color-surface`, `--color-text`, `--color-accent`, `--color-success`, etc. Components should use the semantic alias — touch raw tokens only when you genuinely need the shade.
+  - **Scales**: `--s-0..8` (spacing 2→64), `--r-0..2` (radii, stay sharp — this is a console kit), `--dur-fast/base/slow`, `--ease-snap/out`, `--font-display` (Fraunces + serif fallbacks), `--font-ui` / `--font-mono` (Berkeley / JetBrains / Plex / system mono stack — everything UI is monospace).
+- Shared atoms in `index.css`: `.tok` (bracketed status badge, modifiers `.tok-live/warn/danger/info/accent`), `.dot` (pulsing indicator), `.reg` (register-mark corners for framed panels), `.btn` family, `.kbd`, `.stagger > *` for orchestrated reveals.
+- Aesthetic: "operator console" — warm ink ground, rust brand, phosphor accent, monospace typography. Don't revert to generic dark-SaaS tokens.
+- Utility classes for layout: `.flex-row`, `.flex-col`, `.gap-2`, `.ml-auto`, `.text-muted`, `.tnum`, `.tracked`, `.truncate` etc. Defined in `src/index.css`. **See gotcha #9 for the `.flex-row` centering pitfall.**
 
 ## Auth model: Mock vs Cognito
 
@@ -121,6 +126,9 @@ These bit me during the initial build. They'll bite you too.
 6. **`pnpm install` ignores `esbuild` postinstall by default.** The root `package.json` has `pnpm.onlyBuiltDependencies: ["esbuild"]` to allow it. Don't remove this — vite/vitest fail without esbuild's native binary.
 7. **Browser-direct S3 needs CORS** on the data bucket. Required headers: `AllowedOrigins: [internal ALB hostname]`, methods `GET PUT POST DELETE HEAD`, `AllowedHeaders: ["*"]`, expose `ETag`. This is set outside this repo (Terraform/CloudFormation).
 8. **No console-side enforcement of bucket scope.** The browser sees the user's STS creds and could in theory craft requests outside their prefix — but the IAM role's policy must reject them. Don't trust SPA-side path checks alone; treat them as UX guardrails.
+9. **`.flex-row` sets `align-items: center`.** Great for toolbars and inline rows of mixed-height content — wrong for layout containers. If a flex row is meant to hold nav+main or sidebar+panels that should fill their parent's height, override with `align-items: stretch` (see `.console-body` in `AppShell.css` and `.query-view` in `QueryView.css`). Otherwise children collapse to content height and the rest of the viewport goes empty.
+10. **Monaco custom theme + completion provider register globally.** `SqlEditorImpl` defines the `athena-shell-dark` theme once (guarded by a module flag) and registers the SQL `CompletionItemProvider` on mount. Both must be disposed on unmount, which the cleanup effect does. If you add a second editor or a second provider, remember the registration is global — two mounted editors = duplicate suggestions.
+11. **Schema cache is shared via `SchemaProvider`.** `data/schemaContext.tsx` owns the single copy of databases / tables / columns for a QueryView session; `SchemaTree` and the Monaco completion provider both read from it via `useSchema()`. Don't call `schemaRepo.*` directly from QueryView descendants — you'd create a divergent cache. `SchemaProvider` eager-loads dbs + tables in parallel on mount; columns lazy-load via `loadColumns(db, table)` on first reference (tree expand or `tbl.` autocomplete).
 
 ## Where to add things
 
@@ -134,6 +142,8 @@ These bit me during the initial build. They'll bite you too.
 | A new util | `packages/web/src/utils/<name>.ts` (write a `.test.ts` next to it) |
 | A new shared type | `packages/shared/src/types/<topic>.ts`, re-export from `index.ts` |
 | A new mock fixture | Extend `packages/web/src/data/mockS3Store.ts` or `mockAthena.ts` |
+| A new consumer of schema data (dbs/tables/columns) | Call `useSchema()` from `data/schemaContext.tsx` — don't call `schemaRepo` directly inside QueryView descendants. Extend `SchemaValue` there if you need new derived state. |
+| A new Monaco feature (hover, signature, snippets) | Register inside `SqlEditorImpl`'s mount effect; dispose in the cleanup. Keep the pure logic in a sibling module (see `sqlCompletions.ts` as the pattern). |
 
 ## Testing posture
 

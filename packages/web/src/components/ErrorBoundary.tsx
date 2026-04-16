@@ -24,9 +24,23 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.error) {
       return (
-        <div className="error-boundary">
-          <h2>Something went wrong</h2>
-          <pre>{this.state.error.message}</pre>
+        <div className="boundary-wrap">
+          <div className="boundary reg">
+            <div className="boundary-head tracked">
+              <span className="tok tok-danger">system halt</span>
+              <span className="boundary-rule" aria-hidden />
+              <span className="mono">console · 0x01</span>
+            </div>
+            <h2 className="boundary-title serif">The console stalled.</h2>
+            <p className="boundary-sub mono text-muted">
+              An unhandled exception surfaced to the root boundary.
+              Reload the page; if it persists, check the browser console.
+            </p>
+            <pre className="boundary-stack mono">{this.state.error.message}</pre>
+            <div className="boundary-foot tracked">
+              <span>reload recommended</span>
+            </div>
+          </div>
         </div>
       );
     }

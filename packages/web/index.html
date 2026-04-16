@@ -3,10 +3,40 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Athena Shell</title>
+    <meta name="theme-color" content="#09090c" />
+    <meta name="description" content="athena-shell · operator console for Athena + S3" />
+    <title>athena · shell</title>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2032%2032%27%3E%3Crect%20width%3D%2732%27%20height%3D%2732%27%20rx%3D%274%27%20fill%3D%27%2309090c%27%2F%3E%3Cpath%20d%3D%27M7%2024%20L16%206%20L25%2024%20M10.5%2017%20H21.5%27%20fill%3D%27none%27%20stroke%3D%27%23d8714e%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27square%27%2F%3E%3Ccircle%20cx%3D%2716%27%20cy%3D%2716%27%20r%3D%271.4%27%20fill%3D%27%237edb86%27%2F%3E%3C%2Fsvg%3E"
+    />
+    <style>
+      html, body { background: #09090c; margin: 0; color: #e4ddcd; }
+      #root { min-height: 100vh; }
+      /* first-paint hold: prevents a white flash before the SPA bundle mounts */
+      .boot {
+        position: fixed; inset: 0;
+        display: grid; place-items: center;
+        background: #09090c;
+        font-family: "Berkeley Mono", "JetBrains Mono", "IBM Plex Mono", ui-monospace, monospace;
+        font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+        color: #615a51;
+      }
+      .boot span::after {
+        content: ""; display: inline-block; width: 6px; margin-left: 6px;
+        color: #7edb86; animation: bootblink 1s steps(2, end) infinite;
+      }
+      @keyframes bootblink {
+        0%, 50% { content: "_"; color: #7edb86; }
+        51%, 100% { content: ""; }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot"><span>booting console</span></div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

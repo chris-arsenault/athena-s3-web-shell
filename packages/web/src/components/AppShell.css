@@ -1,52 +1,335 @@
-.app-shell {
-  display: flex;
-  flex-direction: column;
+/* ── console grid ───────────────────────────────────────────── */
+.console {
+  display: grid;
+  grid-template-rows: 56px 1fr 28px;
   height: 100%;
+  animation: reveal-in var(--dur-slow) var(--ease-out);
 }
 
-.app-header {
-  height: 44px;
-  padding: 0 var(--space-4);
+/* ── header ─────────────────────────────────────────────────── */
+.console-head {
+  position: relative;
+  padding: 0 var(--s-5);
+  gap: var(--s-5);
   border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface);
+  background:
+    linear-gradient(180deg, var(--ink-800) 0%, var(--ink-850) 100%);
+  z-index: 3;
 }
 
-.app-title {
+.console-head::after {
+  /* single hairline accent under the header in rust, evokes a console seam */
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0,
+      var(--rust-500) 12%,
+      var(--rust-500) 26%,
+      transparent 40%,
+      transparent 100%
+    );
+  opacity: 0.7;
+}
+
+.brand {
+  align-items: center;
+}
+
+.brand-mark {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+}
+
+.brand-word {
+  font-family: var(--font-display);
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  color: var(--bone-100);
+  font-weight: 400;
+  font-style: italic;
+}
+
+.brand-sep {
+  color: var(--rust-400);
+  margin: 0 2px;
+  font-style: normal;
+}
+
+.brand-sub {
+  font-style: normal;
+  color: var(--bone-200);
+}
+
+.brand-tag {
+  margin-top: 2px;
+  color: var(--color-text-muted);
+  font-size: 9.5px;
+}
+
+.brand-v {
+  color: var(--rust-400);
+  margin-left: 4px;
+}
+
+.head-center {
+  padding-left: var(--s-4);
+  border-left: 1px solid var(--color-border);
+  align-self: stretch;
+  align-items: center;
+}
+
+.principal {
+  align-items: center;
+  padding-left: var(--s-4);
+  border-left: 1px solid var(--color-border);
+  align-self: stretch;
+}
+
+.principal-info {
+  align-items: flex-end;
+  line-height: 1.25;
+}
+
+.principal-name {
+  color: var(--bone-100);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.principal-role {
+  color: var(--color-text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.principal-stamp {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.1em;
+  color: var(--rust-400);
+  border: 1px solid var(--rust-600);
+  background:
+    linear-gradient(135deg, rgba(192, 88, 58, 0.12), rgba(192, 88, 58, 0.02));
+  border-radius: 2px;
+  position: relative;
 }
 
-.app-body {
+.principal-stamp::before,
+.principal-stamp::after {
+  content: "";
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-color: var(--rust-500);
+  border-style: solid;
+  opacity: 0.9;
+}
+
+.principal-stamp::before {
+  top: -2px;
+  left: -2px;
+  border-width: 1px 0 0 1px;
+}
+
+.principal-stamp::after {
+  bottom: -2px;
+  right: -2px;
+  border-width: 0 1px 1px 0;
+}
+
+/* ── body ───────────────────────────────────────────────────── */
+.console-body {
   overflow: hidden;
+  min-height: 0;
+  align-items: stretch;
 }
 
-.app-nav {
-  width: 180px;
+.console-nav {
+  width: 176px;
+  flex-shrink: 0;
+  padding: var(--s-4) var(--s-3);
+  gap: var(--s-1);
   border-right: 1px solid var(--color-border);
-  background: var(--color-surface);
-  padding: var(--space-3);
+  background:
+    linear-gradient(180deg, var(--ink-800), var(--ink-850));
 }
 
-.app-nav-link {
+.console-nav-label {
+  padding: 0 var(--s-2) var(--s-2);
+  color: var(--color-text-dim);
+}
+
+.console-nav-link {
+  position: relative;
   display: flex;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-1);
+  gap: var(--s-3);
+  align-items: center;
+  padding: var(--s-2) var(--s-2) var(--s-2) var(--s-3);
   color: var(--color-text);
   text-decoration: none;
-  font-size: 14px;
+  border-radius: var(--r-1);
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
 }
 
-.app-nav-link:hover {
-  background: var(--color-surface-2);
+.console-nav-link:hover {
+  background: var(--ink-700);
 }
 
-.app-nav-link.active {
-  background: var(--color-surface-2);
-  color: var(--color-accent);
+.console-nav-link.active {
+  background: var(--ink-700);
+  color: var(--bone-100);
 }
 
-.app-main {
+.nav-mark {
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: transparent;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.nav-mark[data-active="true"] {
+  background: var(--rust-500);
+  box-shadow: 0 0 8px var(--rust-500);
+}
+
+.nav-index {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-dim);
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+  width: 18px;
+}
+
+.console-nav-link.active .nav-index {
+  color: var(--rust-400);
+}
+
+.nav-body {
+  flex: 1;
+  min-width: 0;
+  gap: 1px;
+}
+
+.nav-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: inherit;
+}
+
+.nav-hint {
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+}
+
+.console-nav-foot {
+  margin-top: auto;
+  padding: var(--s-3) var(--s-2) var(--s-1);
+  border-top: 1px dashed var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.console-nav-foot .tracked {
+  padding-bottom: var(--s-2);
+  color: var(--color-text-dim);
+}
+
+.nav-foot-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.nav-foot-row .mono {
+  color: var(--color-text);
+}
+
+.console-main {
   overflow: hidden;
   display: flex;
+  min-width: 0;
+  min-height: 0;
+  background: var(--ink-850);
+}
+
+/* ── status bar ─────────────────────────────────────────────── */
+.statusbar {
+  padding: 0 var(--s-4);
+  border-top: 1px solid var(--color-border);
+  background: var(--ink-900);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  align-items: center;
+  gap: var(--s-3);
+  color: var(--color-text-muted);
+  overflow: hidden;
+}
+
+.statusbar::before {
+  /* left power line — a subtle rust bar suggesting the console is "on" */
+  content: "";
+  width: 3px;
+  height: 12px;
+  background: var(--rust-500);
+  box-shadow: 0 0 8px var(--rust-500);
+  flex-shrink: 0;
+}
+
+.sb-sep {
+  color: var(--color-text-dim);
+  flex-shrink: 0;
+}
+
+.sb-pair {
+  display: inline-flex;
+  gap: var(--s-1);
+  align-items: center;
+  min-width: 0;
+}
+
+.sb-key {
+  color: var(--color-text-dim);
+  font-weight: 500;
+}
+
+.sb-val {
+  color: var(--color-text);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11px;
+  max-width: 220px;
+}
+
+.statusbar .tok {
+  text-transform: uppercase;
 }

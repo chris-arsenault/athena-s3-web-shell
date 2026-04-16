@@ -1,6 +1,11 @@
 .workspace {
-  padding: var(--space-3);
-  gap: var(--space-3);
+  padding: var(--s-5) var(--s-6);
+  gap: var(--s-4);
   overflow: auto;
   flex: 1;
+  animation: reveal-in var(--dur-slow) var(--ease-out);
+}
+
+.workspace > * {
+  flex-shrink: 0;
 }

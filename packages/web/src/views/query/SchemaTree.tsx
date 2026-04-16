@@ -1,89 +1,139 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
-import type { DatabaseRef, TableDetail, TableRef } from "@athena-shell/shared";
+import type { Column, DatabaseRef, TableRef } from "@athena-shell/shared";
 
-import { useAuth } from "../../auth/authContext";
 import { LoadingSpinner } from "../../components/LoadingSpinner";
-import { getTable, listDatabases, listTables } from "../../data/schemaRepo";
+import { useSchema } from "../../data/schemaContext";
 import "./SchemaTree.css";
 
-export function SchemaTree() {
-  const { provider } = useAuth();
-  const [dbs, setDbs] = useState<DatabaseRef[] | null>(null);
-  const [openDb, setOpenDb] = useState<string | null>(null);
-  const [tables, setTables] = useState<Record<string, TableRef[]>>({});
-  const [openTable, setOpenTable] = useState<string | null>(null);
-  const [tableDetail, setTableDetail] = useState<TableDetail | null>(null);
+const NO_TABLES: TableRef[] = [];
 
-  useEffect(() => {
-    listDatabases(provider).then((p) => setDbs(p.items));
-  }, [provider]);
+export function SchemaTree() {
+  const schema = useSchema();
+  const [openDb, setOpenDb] = useState<string | null>(null);
+  const [openTable, setOpenTable] = useState<string | null>(null);
 
   const toggleDb = async (name: string) => {
-    if (openDb === name) {
-      setOpenDb(null);
-      return;
-    }
+    if (openDb === name) return setOpenDb(null);
     setOpenDb(name);
-    if (!tables[name]) {
-      const p = await listTables(provider, name);
-      setTables((cur) => ({ ...cur, [name]: p.items }));
-    }
+    await schema.loadTables(name);
   };
 
   const toggleTable = async (db: string, name: string) => {
     const key = `${db}.${name}`;
-    if (openTable === key) {
-      setOpenTable(null);
-      return;
-    }
+    if (openTable === key) return setOpenTable(null);
     setOpenTable(key);
-    const detail = await getTable(provider, db, name);
-    setTableDetail(detail);
+    await schema.loadColumns(db, name);
   };
 
-  if (!dbs) return <LoadingSpinner label="Loading schema…" />;
+  if (!schema.databases) return <LoadingSpinner label="catalog" />;
 
   return (
-    <div className="schema-tree">
-      <div className="schema-head">Catalog</div>
+    <div className="catalog">
+      <div className="catalog-head">
+        <div className="tracked">Catalog</div>
+        <span className="catalog-count mono">
+          {String(schema.databases.length).padStart(2, "0")}
+        </span>
+      </div>
+      <div className="catalog-rule" aria-hidden />
       <ul className="tree-list">
-        {dbs.map((db) => (
-          <li key={db.name}>
-            <button className="tree-row" onClick={() => toggleDb(db.name)}>
-              <span>{openDb === db.name ? "▾" : "▸"}</span>
-              <span>🗄️</span>
-              <span className="truncate">{db.name}</span>
-            </button>
-            {openDb === db.name && (
-              <ul className="tree-list tree-nested">
-                {(tables[db.name] ?? []).map((t) => (
-                  <li key={t.name}>
-                    <button className="tree-row" onClick={() => toggleTable(db.name, t.name)}>
-                      <span>
-                        {openTable === `${db.name}.${t.name}` ? "▾" : "▸"}
-                      </span>
-                      <span>📋</span>
-                      <span className="truncate">{t.name}</span>
-                    </button>
-                    {openTable === `${db.name}.${t.name}` && tableDetail && (
-                      <ul className="tree-list tree-nested">
-                        {tableDetail.columns.map((c) => (
-                          <li key={c.name} className="tree-col flex-row gap-2">
-                            <span>·</span>
-                            <span className="truncate">{c.name}</span>
-                            <span className="text-muted text-sm ml-auto">{c.type}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </li>
+        {schema.databases.map((db, i) => (
+          <DbItem
+            key={db.name}
+            db={db}
+            index={i + 1}
+            open={openDb === db.name}
+            tables={schema.tablesByDb[db.name] ?? NO_TABLES}
+            onToggle={() => toggleDb(db.name)}
+            openTableKey={openTable}
+            columnsByTable={schema.columnsByTable}
+            onToggleTable={toggleTable}
+          />
         ))}
       </ul>
     </div>
+  );
+}
+
+interface DbItemProps {
+  db: DatabaseRef;
+  index: number;
+  open: boolean;
+  tables: TableRef[];
+  onToggle: () => void;
+  openTableKey: string | null;
+  columnsByTable: Record<string, Column[]>;
+  onToggleTable: (db: string, name: string) => void;
+}
+
+function DbItem(p: DbItemProps) {
+  return (
+    <li className="tree-db">
+      <button
+        className={`tree-row tree-db-row ${p.open ? "is-open" : ""}`}
+        onClick={p.onToggle}
+      >
+        <span className="tree-caret">{p.open ? "▾" : "▸"}</span>
+        <span className="tree-idx">{String(p.index).padStart(2, "0")}</span>
+        <span className="tree-kind">▣</span>
+        <span className="truncate tree-name">{p.db.name}</span>
+      </button>
+      {p.open && (
+        <ul className="tree-list tree-nested">
+          {p.tables.map((t) => {
+            const k = `${p.db.name}.${t.name}`;
+            return (
+              <TblItem
+                key={t.name}
+                table={t}
+                open={p.openTableKey === k}
+                columns={p.columnsByTable[k]}
+                onToggle={() => p.onToggleTable(p.db.name, t.name)}
+              />
+            );
+          })}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+interface TblItemProps {
+  table: TableRef;
+  open: boolean;
+  columns?: Column[];
+  onToggle: () => void;
+}
+
+function TblItem({ table, open, columns, onToggle }: TblItemProps) {
+  return (
+    <li>
+      <button
+        className={`tree-row tree-tbl-row ${open ? "is-open" : ""}`}
+        onClick={onToggle}
+      >
+        <span className="tree-caret">{open ? "▾" : "▸"}</span>
+        <span className="tree-kind tree-kind-tbl">▤</span>
+        <span className="truncate tree-name">{table.name}</span>
+      </button>
+      {open && columns && (
+        <ul className="tree-list tree-cols">
+          {columns.map((c) => (
+            <ColItem key={c.name} column={c} />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+function ColItem({ column }: { column: Column }) {
+  return (
+    <li className="tree-col">
+      <span className="tree-col-rule" aria-hidden />
+      <span className="tree-col-name truncate">{column.name}</span>
+      <span className="tree-col-type">{column.type}</span>
+    </li>
   );
 }

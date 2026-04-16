@@ -2,24 +2,49 @@
   height: 100%;
   width: 100%;
   overflow: hidden;
+  background: var(--ink-850);
+  align-items: stretch;
 }
+
 .query-side {
-  width: 240px;
+  width: 248px;
+  flex-shrink: 0;
   border-right: 1px solid var(--color-border);
-  background: var(--color-surface);
+  background: var(--ink-800);
   overflow: auto;
 }
+
 .query-history {
-  width: 280px;
+  width: 296px;
+  flex-shrink: 0;
   border-left: 1px solid var(--color-border);
-  background: var(--color-surface);
+  background: var(--ink-800);
   overflow: auto;
 }
+
 .query-main {
   overflow: hidden;
+  min-width: 0;
 }
+
 .query-editor {
   flex: 1 1 50%;
   min-height: 0;
   border-bottom: 1px solid var(--color-border);
+  background: var(--ink-900);
+  position: relative;
+}
+
+.query-editor::before {
+  /* left gutter accent */
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  background: linear-gradient(180deg, transparent, var(--rust-500) 30%, var(--rust-500) 70%, transparent);
+  opacity: 0.25;
+  pointer-events: none;
+  z-index: 1;
 }

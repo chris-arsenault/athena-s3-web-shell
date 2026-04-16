@@ -1,15 +1,41 @@
-.file-browser {
-  background: var(--color-surface);
+.fb {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.fb-banner {
+  align-items: center;
+  padding: var(--s-2) var(--s-3);
+  gap: var(--s-3);
+  border-bottom: 1px dashed var(--color-border);
+}
+
+.fb-banner-rule {
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+  opacity: 0.5;
+}
+
+.fb-banner-dot {
+  margin: 0 6px;
+  color: var(--color-text-dim);
+}
+
+.fb-grid {
+  background: var(--ink-800);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-2);
+  border-radius: var(--r-1);
   overflow: hidden;
 }
+
 .fb-row {
   display: grid;
-  grid-template-columns: 1fr 100px 200px 220px;
+  grid-template-columns: 1fr 110px 180px 200px;
   align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
+  gap: var(--s-4);
+  padding: 10px var(--s-4);
   border-bottom: 1px solid var(--color-border);
   background: transparent;
   color: var(--color-text);
@@ -17,19 +43,150 @@
   border-left: 0;
   border-right: 0;
   border-top: 0;
-  font-size: 13px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+  transition: background var(--dur-fast) var(--ease-out);
 }
+
 .fb-row:last-child {
   border-bottom: none;
 }
+
 .fb-head {
-  background: var(--color-surface-2);
-  font-weight: 600;
+  background: var(--ink-750);
+  padding: 8px var(--s-4);
+  border-bottom: 1px solid var(--color-border-strong);
 }
+
+.fb-head > * {
+  color: var(--color-text-dim);
+}
+
 .fb-clickable {
   cursor: pointer;
   width: 100%;
+  font-family: inherit;
+  color: inherit;
+  font-size: inherit;
 }
-.fb-clickable:hover {
-  background: var(--color-surface-2);
+
+.fb-row:not(.fb-head):hover {
+  background: rgba(216, 113, 78, 0.04);
+}
+
+.fb-folder:hover .fb-open-hint {
+  color: var(--rust-400);
+}
+
+.fb-name {
+  display: flex;
+  gap: var(--s-3);
+  align-items: center;
+  min-width: 0;
+}
+
+.fb-name-text {
+  color: var(--bone-100);
+  font-size: 12.5px;
+  letter-spacing: 0.01em;
+}
+
+.fb-folder .fb-name-text {
+  color: var(--bone-200);
+}
+
+/* ── file type badge ────────────────────────────────────────── */
+.ftype {
+  display: inline-grid;
+  place-items: center;
+  min-width: 36px;
+  padding: 2px 6px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  height: 18px;
+  opacity: 0.9;
+  color: var(--bone-400);
+  flex-shrink: 0;
+}
+
+.ftype-data    { color: var(--blueprint-500); }
+.ftype-code    { color: var(--phosphor-500); }
+.ftype-archive { color: var(--amber-500); }
+.ftype-image   { color: var(--rust-400); }
+.ftype-text    { color: var(--bone-300); }
+.ftype-doc     { color: var(--bone-200); }
+.ftype-bin     { color: var(--color-text-dim); }
+
+.ftype-dir {
+  color: var(--rust-400);
+  font-size: 14px;
+  min-width: 22px;
+  padding: 0;
+  border: none;
+  height: auto;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+
+/* ── size / date ────────────────────────────────────────────── */
+.text-right { text-align: right; }
+
+.fb-size {
+  color: var(--bone-200);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.fb-date {
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+}
+
+/* ── actions ────────────────────────────────────────────────── */
+.fb-actions {
+  justify-content: flex-end;
+  display: flex;
+}
+
+.fb-actions-folder {
+  justify-content: flex-end;
+  color: var(--color-text-dim);
+}
+
+.fb-open-hint {
+  font-size: 10px;
+  color: var(--color-text-dim);
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+.fb-action {
+  opacity: 0;
+  transform: translateX(4px);
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+  padding: 3px 8px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+
+.fb-row:hover .fb-action {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* keep actions visible when a button is keyboard-focused */
+.fb-action:focus-visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.fb-action-danger:hover {
+  color: var(--crimson-500);
 }

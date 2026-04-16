@@ -1,18 +1,45 @@
-.error-banner {
+.alert {
+  position: relative;
   align-items: center;
-  padding: var(--space-2) var(--space-3);
-  background: rgba(239, 93, 93, 0.12);
-  border: 1px solid var(--color-danger);
-  border-radius: var(--radius-1);
-  color: var(--color-text);
-  margin: var(--space-2);
+  padding: var(--s-2) var(--s-3) var(--s-2) 0;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(217, 85, 85, 0.12),
+      rgba(217, 85, 85, 0.02) 60%,
+      transparent 100%
+    );
+  border: 1px solid rgba(217, 85, 85, 0.35);
+  border-radius: var(--r-1);
+  margin: var(--s-2) var(--s-3);
+  overflow: hidden;
 }
-.error-dismiss {
+
+.alert-stripe {
+  width: 4px;
+  align-self: stretch;
+  background: var(--crimson-500);
+  box-shadow: 0 0 14px var(--crimson-500);
+  margin-right: var(--s-2);
+}
+
+.alert-msg {
+  color: var(--color-text-strong);
+  font-size: 12px;
+}
+
+.alert-dismiss {
   background: transparent;
   color: var(--color-text-muted);
   border: none;
-  padding: 0 var(--space-1);
+  padding: 0 var(--s-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out);
 }
-.error-dismiss:hover {
-  color: var(--color-text);
+
+.alert-dismiss:hover {
+  color: var(--crimson-500);
 }

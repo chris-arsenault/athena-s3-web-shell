@@ -234,6 +234,8 @@ Each domain has a repo that abstracts "real AWS vs. mock":
 
 The branch is always `if (provider.isMock()) return mockX(...); else return apiCall(...);` — explicit, greppable, no Magic Strategy registry.
 
+One repo has a context layer on top of it: **`schemaRepo` is wrapped by `data/schemaContext.tsx`**, a React context (`SchemaProvider` + `useSchema()` hook) that holds a single cache of `{databases, tablesByDb, columnsByTable}` for the lifetime of a QueryView session. Both the `SchemaTree` sidebar and the Monaco SQL completion provider read from the same cache. On mount it eagerly calls `listDatabases` then `Promise.all(listTables(...))` for every db; columns are lazy, loaded via `loadColumns(db, table)` when a user expands a table in the tree or triggers `table.<autocomplete>` in the editor. Inside the QueryView tree, call `useSchema()` — don't go through `schemaRepo` directly, or the two surfaces diverge.
+
 ### 5.3 IndexedDB schema
 
 `localDb.ts` defines DB `athena-shell` v1 with three object stores:
@@ -391,10 +393,23 @@ Lazy-loaded. `SqlEditor.tsx` is a `Suspense` wrapper; `SqlEditorImpl.tsx` does t
 
 If you ever import from `monaco-editor` outside `SqlEditorImpl.tsx`, the bundle splits break and the main chunk doubles. Don't.
 
+Two pieces of custom logic live on the editor at mount:
+
+- **Custom theme** `athena-shell-dark` — registered once (guarded by a module flag). Maps SQL tokens to the operator-console palette: rust keywords, phosphor strings, blueprint types, amber numbers, bone identifiers. Cursor and active line number are rust; selection is rust-tinted. Defined inline in `SqlEditorImpl.tsx`.
+- **Schema-aware completion provider** — a `monaco.languages.registerCompletionItemProvider("sql", ...)` registration, with the pure suggestion-building logic in `views/query/sqlCompletions.ts`. Trigger character is `.`. Flow:
+  - `word.value.` (qualified) → if the qualifier matches a database, suggest its tables; if it matches a table name, suggest its columns. Columns lazy-fetch through `useSchema().loadColumns(db, table)` when not yet cached — the provider returns a Promise, Monaco shows a loading state, and resolves when ready.
+  - Unqualified → suggest all databases (Module kind), all known tables (Class kind, with `table · db` detail), all cached columns (Field kind, with `type · db.table` detail), and a curated SQL keyword list. `sortText` prefixes (`1_*`, `2_*`, `3_*`, `9_*`) rank dbs → tables → columns → keywords.
+
+Both the theme and the provider are disposed in the cleanup effect, so remounting the editor (HMR, navigation) doesn't accumulate registrations. A ref keeps the provider reading the latest schema snapshot without re-registering.
+
 ### 7.5 Styling
-Plain CSS, co-located. `src/index.css` defines:
-- All theming via CSS custom properties (`--color-*`, `--space-*`, `--radius-*`, `--font-*`)
-- Utility classes for layout (`.flex-row`, `.flex-col`, `.gap-2`, `.ml-auto`, `.text-muted`, `.truncate`, `.cursor-pointer`)
+Plain CSS, co-located. `src/index.css` defines the full token system — palette (`--ink-*`, `--bone-*`, `--rust-*`, `--phosphor-*`, `--amber-*`, `--crimson-*`, `--blueprint-*`), semantic aliases (`--color-bg/surface/text/accent/success/...`), scales (`--s-0..8` spacing, `--r-0..2` radii, `--dur-*` duration, `--ease-*` easing), and fonts (`--font-display` Fraunces+serif, `--font-ui`/`--font-mono` Berkeley/JetBrains/Plex stack — **everything UI is monospace**).
+
+Shared atoms: `.tok` (bracketed status badge with color modifiers), `.dot` (pulsing indicator), `.reg` (register-mark corners for framed panels), `.btn` / `.btn-primary` / `.btn-ghost` / `.btn-danger`, `.kbd`, `.stagger > *` for orchestrated reveals. Layout utilities: `.flex-row` / `.flex-col` / `.gap-*` / `.ml-auto` / `.text-muted` / `.tnum` (tabular-nums) / `.tracked` (uppercase letter-spaced).
+
+Aesthetic intent — "operator console": warm ink ground, rust brand, phosphor live signals, blueprint secondary, monospace-heavy UI, register-mark framing, subtle grid backdrop, staggered reveals. Commit to this; don't slide back toward generic dark-SaaS.
+
+One subtle pitfall with `.flex-row`: it sets `align-items: center`, which is right for inline rows of mixed-height content (toolbars, header) but wrong for layout containers that should stretch children to fill the viewport. `.console-body` (in `AppShell.css`) and `.query-view` (in `QueryView.css`) explicitly override to `align-items: stretch` so the nav / main / panels fill vertically. If you build a new layout container on top of `.flex-row`, override it.
 
 `local/no-inline-styles` is an error. The escape hatch — for genuinely dynamic values like progress-bar widths — is a per-line eslint disable with a comment explaining why. There's exactly one in the codebase right now (in `UploadQueue.tsx` for the bar fill width).
 

@@ -27,37 +27,65 @@ export function HistoryPanel({ refreshKey, onSelect }: Props) {
     };
   }, [provider, refreshKey]);
 
-  if (!items) return <LoadingSpinner label="History…" />;
+  if (!items) return <LoadingSpinner label="history" />;
 
   return (
-    <div className="history">
-      <div className="history-head">History</div>
-      {items.length === 0 && <div className="text-muted text-sm history-empty">No queries yet.</div>}
-      <ul className="history-list">
-        {items.map((e) => (
-          <li key={e.executionId} className="history-row flex-col gap-1">
-            <button className="history-link" onClick={() => onSelect(e)}>
-              <code className="truncate">{e.sql.replace(/\s+/g, " ").slice(0, 60)}</code>
-            </button>
-            <div className="flex-row gap-2 text-sm text-muted">
-              <span className={`history-state state-${e.state.toLowerCase()}`}>{e.state}</span>
-              <span>{formatRelative(e.submittedAt)}</span>
-              <button
-                className="history-fav ml-auto"
-                aria-label={e.favorite ? "Unfavorite" : "Favorite"}
-                onClick={async () => {
-                  await toggleFavorite(e);
-                  setItems((cur) =>
-                    cur ? cur.map((x) => (x === e ? { ...x, favorite: !x.favorite } : x)) : cur
-                  );
-                }}
-              >
-                {e.favorite ? "★" : "☆"}
+    <div className="log">
+      <div className="log-head">
+        <div className="tracked">Journal</div>
+        <span className="log-count mono">
+          {String(items.length).padStart(3, "0")}
+        </span>
+      </div>
+      <div className="log-rule" aria-hidden />
+      {items.length === 0 && (
+        <div className="log-empty mono text-muted">
+          <span className="text-dim">∅ </span>No executions on record.
+        </div>
+      )}
+      <ol className="log-list">
+        {items.map((e, i) => (
+          <li key={e.executionId} className={`log-entry state-${e.state.toLowerCase()}`}>
+            <div className="log-gutter mono">
+              <span className="log-line">{String(i + 1).padStart(3, "0")}</span>
+              <span className="log-rail" aria-hidden />
+            </div>
+            <div className="log-body flex-col gap-1">
+              <button className="log-sql mono" onClick={() => onSelect(e)}>
+                <code className="truncate">
+                  {e.sql.replace(/\s+/g, " ").trim().slice(0, 72)}
+                </code>
               </button>
+              <div className="log-meta flex-row gap-2">
+                <span className={`tok tok-${stateTok(e.state)}`}>{e.state}</span>
+                <span className="log-time mono text-muted">{formatRelative(e.submittedAt)}</span>
+                <button
+                  className={`log-fav ml-auto ${e.favorite ? "is-fav" : ""}`}
+                  aria-label={e.favorite ? "Unpin" : "Pin"}
+                  onClick={async () => {
+                    await toggleFavorite(e);
+                    setItems((cur) =>
+                      cur
+                        ? cur.map((x) => (x === e ? { ...x, favorite: !x.favorite } : x))
+                        : cur
+                    );
+                  }}
+                >
+                  {e.favorite ? "★" : "☆"}
+                </button>
+              </div>
             </div>
           </li>
         ))}
-      </ul>
+      </ol>
     </div>
   );
+}
+
+function stateTok(state: string): "live" | "warn" | "danger" | "info" {
+  const s = state.toLowerCase();
+  if (s === "succeeded") return "live";
+  if (s === "running" || s === "queued") return "warn";
+  if (s === "failed" || s === "cancelled") return "danger";
+  return "info";
 }
