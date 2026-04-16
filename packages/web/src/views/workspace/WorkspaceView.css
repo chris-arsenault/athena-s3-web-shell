@@ -1,0 +1,6 @@
+.workspace {
+  padding: var(--space-3);
+  gap: var(--space-3);
+  overflow: auto;
+  flex: 1;
+}

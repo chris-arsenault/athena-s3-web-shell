@@ -1,0 +1,15 @@
+.empty-state {
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--color-text-muted);
+}
+.empty-icon {
+  font-size: 32px;
+  opacity: 0.6;
+}
+.empty-title {
+  font-size: 14px;
+  color: var(--color-text);
+}

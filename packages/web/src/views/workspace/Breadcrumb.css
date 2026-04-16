@@ -1,0 +1,20 @@
+.breadcrumb {
+  align-items: center;
+  flex-wrap: wrap;
+}
+.crumb {
+  background: transparent;
+  border: none;
+  color: var(--color-accent);
+  padding: 2px 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.crumb:hover {
+  text-decoration: underline;
+}
+.crumb-sep {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
