@@ -6,24 +6,24 @@ This document is the source of truth for how athena-shell is built. If you're pi
 
 ## 1. Why this exists
 
-Non-technical federal users need two things from AWS that the AWS console serves badly:
+Non-technical users in regulated or network-restricted organizations need two things from AWS that the AWS console serves badly:
 
 1. **Move files in and out of S3** — the console's S3 page is workable but assumes IAM literacy and offers no concept of "your" workspace.
 2. **Run ad-hoc SQL against those files via Athena** — the Athena console exposes workgroups, output locations, query catalogs, and row-limit gotchas that confuse end users.
 
-Free desktop tools like DBeaver solve the SQL UX, but **none support Cognito-federated SSO** — required because federal users authenticate via Entra ID, not user/password databases.
+Free desktop tools like DBeaver solve the SQL UX, but **none support Cognito-federated SSO** — required when users authenticate via an enterprise IdP (Entra / Okta / etc.), not user/password databases. They also assume the user's machine can reach the data, which often isn't true in restricted environments.
 
 athena-shell is a **thin web shell over the AWS APIs that already do the work**, with two design priorities:
 
 - **Almost no business logic.** The IAM role enforces permissions. Workgroups enforce query budgets. We don't reimplement these — we just present them.
-- **Fits in a federal enclave.** No internet egress, no API Gateway, no edge runtimes, no third-party SaaS. Everything ships as one ECS Fargate task.
+- **Fits inside a private VPC.** No internet egress, no API Gateway, no edge runtimes, no third-party SaaS. Everything ships as one ECS Fargate task. This is what makes it usable in environments where everything else can't reach the data.
 
 ---
 
 ## 2. Constraints that shape every decision
 
-### 2.1 Federal enclave deployment
-Production runs inside a VPC on AWS commercial (NOT GovCloud) with **no internet egress**. This eliminates the architectural patterns most SaaS apps would reach for first:
+### 2.1 VPC-bound deployment, no internet egress
+Production runs inside a private VPC on AWS commercial with **no internet egress**. This eliminates the architectural patterns most SaaS apps would reach for first:
 
 - ❌ API Gateway — internet-facing by default
 - ❌ CloudFront / Cloudflare / Vercel Edge — external network plane
@@ -37,8 +37,10 @@ What's left:
 - ✅ Cognito (via interface endpoint) once auth is wired
 - ✅ S3 via gateway endpoint
 
+This shape is common in regulated finance, healthcare, defense, aerospace, and public-sector deployments — anywhere a security review forbids data leaving the VPC.
+
 ### 2.2 Standard tech over novel tech
-Per the project owner: federal review boards and team members are more comfortable with mature, widely-known dependencies. We use Express (not Hono), Vite (not Webpack/Bun), AWS SDK v3 (the only choice), and idb (the lightest sane IndexedDB wrapper). Any time you reach for something newer, justify it in writing.
+Mature, widely-known dependencies make security review and contributor onboarding easier. We use Express (not Hono), Vite (not Webpack/Bun), AWS SDK v3 (the only choice), and idb (the lightest sane IndexedDB wrapper). Any time you reach for something newer, justify it in writing.
 
 ### 2.3 Thin shell, not a platform
 Don't build features that AWS already gives us. Bucket policies, IAM roles, workgroup quotas, Athena query history, Glue catalog — these are all the source of truth. The shell renders them and wires UX flows. If a feature requires duplicating IAM logic in TypeScript, that's a smell.
@@ -51,7 +53,7 @@ Don't build features that AWS already gives us. Bucket policies, IAM roles, work
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                       Federal enclave VPC                           │
+│                          Private VPC                                │
 │                                                                     │
 │  Browser ─── TLS ───► internal ALB ─── HTTP ───► ECS Fargate task   │
 │      │                                            ┌─────────────┐   │
@@ -90,7 +92,7 @@ Both halves — Express proxy and built SPA — ship in **one container**. The D
 
 We considered serving the SPA from a separate Fargate task or from S3+CloudFront. Both were rejected:
 - Separate Fargate task: doubles deployment surface for a 22 MB asset bundle that doesn't change independently of the proxy.
-- S3+CloudFront: CloudFront is internet-facing by default; the enclave forbids it.
+- S3+CloudFront: CloudFront is internet-facing by default; the target environment forbids it.
 
 The trade-off: SPA and proxy are version-locked. In practice this is a feature — the `/api` shape and the SPA's expectations evolve together.
 
@@ -509,7 +511,7 @@ All as **interface endpoints with private DNS enabled**, except S3 which is a **
 | Glue | interface | catalog browse |
 | STS | interface | (post-#2) AssumeRoleWithWebIdentity, plus current Cognito Identity Pool exchange |
 | Logs (CloudWatch) | interface | container logs |
-| ECR API + DKR | interface | image pulls (ECR is not internet-reachable from the enclave) |
+| ECR API + DKR | interface | image pulls (ECR is not internet-reachable from inside the VPC) |
 | Secrets Manager | interface | future Cognito client secret, JWKS cache config |
 | SSM | interface | runtime config |
 | KMS | interface | only if data buckets use SSE-KMS |
@@ -654,7 +656,7 @@ Backlog tracked as GitHub issues:
 |---|---|
 | [#1](https://github.com/chris-arsenault/athena-s3-web-shell/issues/1) Cognito + Entra federation | The actual auth — without this it's a demo |
 | [#2](https://github.com/chris-arsenault/athena-s3-web-shell/issues/2) AssumeRoleWithWebIdentity per request | Move enforcement from app code to IAM |
-| [#3](https://github.com/chris-arsenault/athena-s3-web-shell/issues/3) Audit logging | Federal compliance requirement |
+| [#3](https://github.com/chris-arsenault/athena-s3-web-shell/issues/3) Audit logging | Compliance requirement in regulated environments |
 | [#4](https://github.com/chris-arsenault/athena-s3-web-shell/issues/4) Result streaming + virtualized table | Handle real-world large result sets |
 | [#5](https://github.com/chris-arsenault/athena-s3-web-shell/issues/5) S3 → Athena table auto-creation | Closes the "drop a file, query it" loop the product is named for |
 
@@ -669,13 +671,13 @@ The non-obvious choices, in case you wonder why something is the way it is:
 | Decision | Rationale |
 |---|---|
 | Hybrid AWS access (S3 direct, Athena via proxy) | Multi-GB browser→S3 uploads/downloads can't go through proxy memory. Athena/Glue go through proxy so workgroup config and result presigning live in one place. |
-| Single Fargate task serving SPA + API | Federal enclave forbids CloudFront. S3+ALB-static was considered and rejected as more plumbing for no real benefit. |
-| Express, not Hono/Fastify | User explicitly wanted standard tech for federal review boards. |
+| Single Fargate task serving SPA + API | VPC-bound deployments forbid CloudFront. S3+ALB-static was considered and rejected as more plumbing for no real benefit. |
+| Express, not Hono/Fastify | Mature, widely understood — easier to get past security review and onboard contributors. |
 | Monaco, not CodeMirror | Matches DBeaver polish users expect. The bundle penalty is acceptable because it's lazy-loaded. |
-| Plain CSS, not CSS modules / styled-components | Mirrors ahara-standards. Simpler bundle, simpler debugging. |
+| Plain CSS, not CSS modules / styled-components | Simpler bundle, simpler debugging, no runtime dep, no build complexity. |
 | pnpm workspaces, not turbo/nx | Three packages don't justify a build orchestrator. pnpm's recursive runner is enough. |
 | Vite 5, not 6 | Vitest 2.x ships vite 5; mixing breaks plugin types. |
-| Mock everything in dev | Federal contributors may not have AWS sandbox access. The mock layer is intentional, not a stopgap. |
+| Mock everything in dev | Contributors may not have AWS sandbox access (common in restricted-network shops). The mock layer is intentional, not a stopgap. |
 | IndexedDB for query history (merged with Athena) | Local favorites survive Athena's 45-day retention. No backend state to manage. |
 | `AuthProvider` interface from day one | The Cognito work is large; we wanted to ship the shell while it's deferred. The abstraction is the only way to swap providers cleanly later. |
 | Per-request `AssumeRoleWithWebIdentity` deferred | Requires Cognito to be wired first, and the v1 task-role-with-app-side-scoping is acceptable for a closed pilot. |

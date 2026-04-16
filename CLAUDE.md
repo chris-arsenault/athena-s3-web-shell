@@ -4,7 +4,7 @@ Project-specific guidance for Claude Code (and any AI agent) working on athena-s
 
 ## What this project is
 
-A web shell over AWS Athena and S3 for non-technical federal users. Two features behind a single SSO login:
+A web shell over AWS Athena and S3 for users in **VPC-bound / network-restricted environments** — places where the app must run inside a private VPC with no internet egress. Two features behind a single SSO login:
 1. **Personal Workspace** — drag-drop S3 file management against a bucket+prefix scoped to the user's IAM role.
 2. **SQL Query Interface** — web "DBeaver for Athena" with schema explorer, Monaco editor, results, and history.
 
@@ -12,23 +12,22 @@ Intentionally a **thin shell over AWS APIs**. The IAM role enforces access; we d
 
 ## Hard constraints (do not violate)
 
-### Federal enclave deployment
-The production target is a federal enclave on AWS commercial (NOT GovCloud), VPC-only, **no internet egress**. This precludes:
+### VPC-bound deployment, no internet egress
+The production target is a private VPC on AWS commercial, with **no internet egress**. This precludes:
 
 - ❌ API Gateway (default internet-facing)
 - ❌ CloudFront / Cloudflare / any edge runtime
 - ❌ Lambda@Edge
 - ❌ Third-party SaaS with internet-only endpoints
 
-Everything runs in the enclave VPC. AWS calls go through VPC interface/gateway endpoints. The proxy + SPA ship as **one ECS Fargate task** behind an internal ALB. Reject any architecture suggestion that violates this.
+Everything runs inside the VPC. AWS calls go through VPC interface/gateway endpoints. The proxy + SPA ship as **one ECS Fargate task** behind an internal ALB. Reject any architecture suggestion that violates this.
 
 ### Tech preference: standard over novel
-For dependencies, default to mature/widely-known options. The user explicitly preferred Express over Hono ("this is a new technology I'm not familiar with and have not seen in gov space before"). Avoid:
+For dependencies, default to mature/widely-known options. Express was chosen over Hono explicitly because it's mature and widely understood — security review boards and onboarding contributors do better with boring tech. Avoid:
 
 - Hono, Bun, edge-runtime-only frameworks
 - Bleeding-edge React patterns (signals libraries, RSC tooling that's still in flux)
 - Novel state management (zustand is fine if needed; we currently have none)
-- Anything from the `@ahara/*` namespace — we mirror their conventions, we don't depend on them
 
 ### Auth + scope guards
 Every S3 operation must enforce `key.startsWith(authContext.s3.prefix)` and reject paths containing `..` (see `packages/web/src/utils/parseS3Path.ts:isWithinPrefix`). Every Athena call must pass `req.user.athena.workgroup` and `req.user.athena.outputLocation`. The proxy currently uses its own task role and enforces in-app; per-request `AssumeRoleWithWebIdentity` is on the backlog ([#2](https://github.com/chris-arsenault/athena-s3-web-shell/issues/2)).
@@ -50,7 +49,7 @@ If you change the `shared` package, the `dev` script keeps it compiled in watch 
 
 ## Lint rules to know
 
-ESLint flat config v9 with **6 local custom rules** in `eslint-rules/` (mirroring ahara-standards but implemented locally — do **not** add `@ahara/standards` as a dependency):
+ESLint flat config v9 with **6 local custom rules** in `eslint-rules/`:
 
 | Rule | Severity | What it catches |
 |---|---|---|

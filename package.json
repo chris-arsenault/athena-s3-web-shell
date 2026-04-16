@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Web shell over AWS Athena and S3 for non-technical federal users.",
+  "description": "Web shell over AWS Athena and S3 for VPC-bound deployments where existing SQL tools can't reach.",
   "packageManager": "pnpm@10.29.3",
   "engines": {
     "node": ">=20.10.0"
