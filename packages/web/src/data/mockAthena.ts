@@ -83,6 +83,36 @@ interface MockExecution {
 
 const executions = new Map<string, MockExecution>();
 
+// 300 rows of demo data so virtualization + pagination have something to bite
+// on in mock mode.
+const LARGE_RESULT_ROW_COUNT = 300;
+const MOCK_PAGE_SIZE = 100;
+const PRODUCTS = [
+  "Widget",
+  "Gadget",
+  "Sprocket",
+  "Cog",
+  "Piston",
+  "Flange",
+  "Bearing",
+  "Coupler",
+  "Manifold",
+  "Valve",
+];
+
+function buildLargeRows(): string[][] {
+  const rows: string[][] = [];
+  for (let i = 1; i <= LARGE_RESULT_ROW_COUNT; i++) {
+    rows.push([
+      String(i),
+      `${PRODUCTS[i % PRODUCTS.length]}-${String(i).padStart(4, "0")}`,
+      (((i * 37) % 9991) / 7).toFixed(2),
+      new Date(Date.UTC(2026, 0, 1 + (i % 28))).toISOString(),
+    ]);
+  }
+  return rows;
+}
+
 function mockResultsFor(sql: string): QueryResultPage {
   const lower = sql.toLowerCase();
   if (lower.includes("count(")) {
@@ -96,12 +126,26 @@ function mockResultsFor(sql: string): QueryResultPage {
       { name: "id", type: "bigint" },
       { name: "name", type: "string" },
       { name: "amount", type: "decimal(10,2)" },
+      { name: "order_date", type: "timestamp" },
     ],
-    rows: [
-      ["1", "Widget", "12.50"],
-      ["2", "Gadget", "8.00"],
-      ["3", "Sprocket", "42.00"],
-    ],
+    rows: buildLargeRows(),
+  };
+}
+
+// Mock pagination: returns MOCK_PAGE_SIZE rows per call. nextToken encodes
+// the next start offset. Stops when we've exhausted the row set.
+function paginate(
+  page: QueryResultPage,
+  nextToken?: string
+): QueryResultPage {
+  const offset = nextToken ? Number.parseInt(nextToken, 10) : 0;
+  const end = offset + MOCK_PAGE_SIZE;
+  const rows = page.rows.slice(offset, end);
+  const more = end < page.rows.length;
+  return {
+    columns: page.columns,
+    rows,
+    nextToken: more ? String(end) : undefined,
   };
 }
 
@@ -156,10 +200,10 @@ export const mockAthena = {
     if (!e) return;
     e.status = { ...e.status, state: "CANCELLED", completedAt: new Date().toISOString() };
   },
-  async getResults(id: string): Promise<QueryResultPage> {
+  async getResults(id: string, nextToken?: string): Promise<QueryResultPage> {
     const e = executions.get(id);
     if (!e) throw new Error(`No execution ${id}`);
-    return e.results;
+    return paginate(e.results, nextToken);
   },
   async listHistory(): Promise<{ items: HistoryEntry[]; nextToken?: string }> {
     const items: HistoryEntry[] = [];

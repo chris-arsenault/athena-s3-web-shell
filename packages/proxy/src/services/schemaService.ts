@@ -63,14 +63,17 @@ export async function getTable(
     new GetTableCommand({ DatabaseName: database, Name: table })
   );
   const t = out.Table;
-  const sd = t?.StorageDescriptor;
+  if (!t) return { name: table, database, columns: [], partitionKeys: [] };
+  const sd = t.StorageDescriptor;
+  const cols = sd?.Columns ?? [];
+  const partKeys = t.PartitionKeys ?? [];
   return {
-    name: t?.Name ?? table,
+    name: t.Name ?? table,
     database,
-    type: t?.TableType,
-    description: t?.Description,
-    columns: (sd?.Columns ?? []).map((c) => toColumn(c)),
-    partitionKeys: (t?.PartitionKeys ?? []).map((c) => toColumn(c, true)),
+    type: t.TableType,
+    description: t.Description,
+    columns: cols.map((c) => toColumn(c)),
+    partitionKeys: partKeys.map((c) => toColumn(c, true)),
     location: sd?.Location,
   };
 }

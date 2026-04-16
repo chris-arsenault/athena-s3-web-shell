@@ -7,6 +7,9 @@ export const QUERY_POLL_TIMEOUT_MS = 10 * 60 * 1000;
 export const SCHEMA_PAGE_SIZE = 100;
 export const HISTORY_PAGE_SIZE = 50;
 export const RESULTS_PAGE_SIZE = 1000;
+// Hard ceiling on rows the SPA keeps in memory. When reached, the "load more"
+// affordance is replaced with a "download CSV for full set" banner.
+export const RESULTS_ROW_CAP = 10_000;
 
 export const MULTIPART_THRESHOLD_BYTES = 5 * 1024 * 1024;
 export const MULTIPART_PART_SIZE_BYTES = 5 * 1024 * 1024;

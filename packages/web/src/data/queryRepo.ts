@@ -34,10 +34,14 @@ export async function stopQuery(
 
 export async function getResults(
   provider: AuthProvider,
-  executionId: string
+  executionId: string,
+  nextToken?: string
 ): Promise<QueryResultPage> {
-  if (provider.isMock()) return mockAthena.getResults(executionId);
-  return apiGet(`/query/${executionId}/results`, { authHeader: await authHeader(provider) });
+  if (provider.isMock()) return mockAthena.getResults(executionId, nextToken);
+  return apiGet(`/query/${executionId}/results`, {
+    authHeader: await authHeader(provider),
+    query: { nextToken },
+  });
 }
 
 export async function getDownloadUrl(

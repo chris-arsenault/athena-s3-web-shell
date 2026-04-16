@@ -1,7 +1,10 @@
-.PHONY: install dev build lint typecheck test format clean docker
+.PHONY: install dev build lint typecheck test format clean docker ci
 
 install:
 	pnpm install
+
+ci: typecheck lint test build
+	@echo "==> CI passed (typecheck + lint + test + build)"
 
 dev:
 	pnpm dev
