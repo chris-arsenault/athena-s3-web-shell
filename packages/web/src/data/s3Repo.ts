@@ -142,6 +142,46 @@ export async function downloadObject(
   return new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer]);
 }
 
+export interface RangeFetch {
+  text: string;
+  truncated: boolean;
+  totalSize: number;
+}
+
+export async function getObjectRange(
+  provider: AuthProvider,
+  ctx: AuthContext,
+  key: string,
+  bytes: number
+): Promise<RangeFetch> {
+  ensureScoped(ctx, key);
+  if (provider.isMock()) {
+    const blob = await mockS3.get(key);
+    const buf = await blob.arrayBuffer();
+    const totalSize = buf.byteLength;
+    const slice = buf.slice(0, Math.min(bytes, totalSize));
+    const text = new TextDecoder().decode(slice);
+    return { text, truncated: totalSize > bytes, totalSize };
+  }
+  const client = clientFor(provider, ctx);
+  const out = await client.send(
+    new GetObjectCommand({
+      Bucket: ctx.s3.bucket,
+      Key: key,
+      Range: `bytes=0-${bytes - 1}`,
+    })
+  );
+  const text = (await out.Body!.transformToString()) ?? "";
+  const total = parseContentRangeTotal(out.ContentRange) ?? text.length;
+  return { text, truncated: total > bytes, totalSize: total };
+}
+
+function parseContentRangeTotal(header?: string): number | null {
+  if (!header) return null;
+  const m = /\/(\d+)\s*$/.exec(header);
+  return m ? Number.parseInt(m[1]!, 10) : null;
+}
+
 export async function createFolder(
   provider: AuthProvider,
   ctx: AuthContext,

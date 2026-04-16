@@ -6,6 +6,7 @@ import { tableFileTypeFor } from "../../data/datasetsRepo";
 import { fileTypeIcon } from "../../utils/fileTypeIcon";
 import { formatBytes } from "../../utils/formatBytes";
 import { formatDate } from "../../utils/formatDate";
+import { isPreviewable } from "../../utils/previewable";
 import "./FileBrowser.css";
 
 interface Props {
@@ -14,6 +15,7 @@ interface Props {
   onDelete: (key: string) => void | Promise<void>;
   onDownload: (key: string, name: string) => void | Promise<void>;
   onRegisterTable: (obj: S3Object) => void;
+  onPreview: (obj: S3Object) => void;
 }
 
 export function FileBrowser({
@@ -22,6 +24,7 @@ export function FileBrowser({
   onDelete,
   onDownload,
   onRegisterTable,
+  onPreview,
 }: Props) {
   if (!listing) return <LoadingSpinner label="listing" />;
   const total = listing.folders.length + listing.objects.length;
@@ -53,6 +56,7 @@ export function FileBrowser({
             onDownload={onDownload}
             onDelete={onDelete}
             onRegisterTable={onRegisterTable}
+            onPreview={onPreview}
           />
         ))}
       </div>
@@ -107,16 +111,34 @@ interface FileRowProps {
   onDownload: (key: string, name: string) => void | Promise<void>;
   onDelete: (key: string) => void | Promise<void>;
   onRegisterTable: (obj: S3Object) => void;
+  onPreview: (obj: S3Object) => void;
 }
 
-function FileRow({ obj, onDownload, onDelete, onRegisterTable }: FileRowProps) {
+function FileRow({
+  obj,
+  onDownload,
+  onDelete,
+  onRegisterTable,
+  onPreview,
+}: FileRowProps) {
   const type = fileTypeIcon(obj.name);
   const canRegister = tableFileTypeFor(obj.name) !== null;
+  const canPreview = isPreviewable(obj.name);
   return (
     <div className="fb-row fb-file">
       <span className="fb-name">
         <span className={`ftype ftype-${type.kind}`} aria-hidden>{type.code}</span>
-        <span className="truncate fb-name-text">{obj.name}</span>
+        {canPreview ? (
+          <button
+            className="truncate fb-name-text fb-name-link"
+            onClick={() => onPreview(obj)}
+            title="Preview"
+          >
+            {obj.name}
+          </button>
+        ) : (
+          <span className="truncate fb-name-text">{obj.name}</span>
+        )}
       </span>
       <span className="mono text-right tnum fb-size">{formatBytes(obj.size)}</span>
       <span className="mono tnum text-muted fb-date">{formatDate(obj.lastModified)}</span>

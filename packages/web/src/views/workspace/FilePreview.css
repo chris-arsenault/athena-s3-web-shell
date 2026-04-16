@@ -1,0 +1,155 @@
+.fp-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(9, 9, 12, 0.5);
+  backdrop-filter: blur(2px);
+  display: flex;
+  justify-content: flex-end;
+  z-index: 45;
+  animation: reveal-in var(--dur-fast) var(--ease-out);
+}
+
+.fp-drawer {
+  width: min(820px, 60vw);
+  max-width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background:
+    linear-gradient(180deg, var(--ink-800), var(--ink-850));
+  border-left: 1px solid var(--color-border-strong);
+  box-shadow: -40px 0 80px -30px rgba(0, 0, 0, 0.6);
+  animation: slide-in-right var(--dur-base) var(--ease-snap);
+}
+
+@keyframes slide-in-right {
+  from { transform: translateX(24px); opacity: 0.6; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+/* ── header ─────────────────────────────────────────────────── */
+.fp-head {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  gap: var(--s-3);
+  align-items: center;
+  padding: var(--s-3) var(--s-4);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--ink-800);
+}
+
+.fp-head-tok {
+  flex-shrink: 0;
+}
+
+.fp-head-name {
+  color: var(--bone-100);
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  min-width: 0;
+}
+
+.fp-head-meta {
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+}
+
+.fp-close {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  padding: 0 var(--s-2);
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+.fp-close:hover {
+  color: var(--crimson-500);
+}
+
+/* ── body ───────────────────────────────────────────────────── */
+.fp-body {
+  flex: 1;
+  overflow: auto;
+  background: var(--ink-900);
+  position: relative;
+}
+
+.fp-pre {
+  margin: 0;
+  padding: var(--s-3) 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--bone-200);
+}
+
+.fp-line {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: var(--s-3);
+  padding: 0 var(--s-4) 0 0;
+}
+
+.fp-line:hover {
+  background: rgba(216, 113, 78, 0.04);
+}
+
+.fp-lineno {
+  color: var(--color-text-dim);
+  font-size: 10.5px;
+  text-align: right;
+  padding-right: var(--s-2);
+  border-right: 1px solid var(--color-border);
+  background: rgba(0, 0, 0, 0.2);
+  user-select: none;
+}
+
+.fp-linetext {
+  white-space: pre;
+  overflow-wrap: anywhere;
+  color: var(--bone-200);
+}
+
+/* ── status panels (loading / error) ────────────────────────── */
+.fp-status {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-5) var(--s-4);
+  color: var(--color-text-muted);
+  font-size: 11.5px;
+}
+
+.fp-status-error {
+  color: var(--bone-200);
+}
+
+.fp-error-msg {
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--bone-200);
+  font-size: 11.5px;
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ── foot truncation banner ─────────────────────────────────── */
+.fp-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-4);
+  border-top: 1px solid var(--color-border);
+  background: var(--ink-800);
+  font-size: 11px;
+  color: var(--color-text);
+}
+
+.fp-foot .mono {
+  color: var(--bone-200);
+}

@@ -15,6 +15,7 @@ import { joinPrefix } from "../../utils/parseS3Path";
 import { Breadcrumb } from "./Breadcrumb";
 import { CreateTableModal } from "./CreateTableModal";
 import { FileBrowser } from "./FileBrowser";
+import { FilePreview } from "./FilePreview";
 import { UploadDropzone } from "./UploadDropzone";
 import { UploadQueue } from "./UploadQueue";
 import { useFileListing } from "./useFileListing";
@@ -31,6 +32,7 @@ export function WorkspaceView() {
   const [prefix, setPrefix] = useState<string>("");
   const { listing, error, setError, refresh } = useFileListing(provider, context, prefix);
   const [registering, setRegistering] = useState<RegisterTarget | null>(null);
+  const [previewing, setPreviewing] = useState<S3Object | null>(null);
   const uploads = useUploads({ provider, context, prefix, onComplete: refresh });
 
   useEffect(() => {
@@ -85,6 +87,7 @@ export function WorkspaceView() {
         onDelete={onDelete}
         onDownload={onDownload}
         onRegisterTable={onRegisterTable}
+        onPreview={setPreviewing}
       />
       {registering && (
         <CreateTableModal
@@ -97,6 +100,7 @@ export function WorkspaceView() {
           }}
         />
       )}
+      {previewing && <FilePreview file={previewing} onClose={() => setPreviewing(null)} />}
     </div>
   );
 }
