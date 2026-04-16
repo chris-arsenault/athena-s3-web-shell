@@ -161,7 +161,7 @@ interface AuthProvider {
 }
 ```
 
-Both have a `MockAuthProvider` (active in v1) and a `CognitoAuthProvider` (stub, see [#1](https://github.com/chris-arsenault/athena-s3-web-shell/issues/1)).
+Both have a `MockAuthProvider` (dev default) and a fully implemented real-auth provider — `CognitoAuthProvider` on the SPA, `AlbAuthProvider` on the proxy. Selected at build time via `VITE_AUTH_PROVIDER` (web) and `AUTH_PROVIDER` (proxy). See §4.4 for the wiring.
 
 ### 4.2 `AuthContext` — the identity + scope tuple
 
@@ -191,19 +191,40 @@ Every component reads scoping from this object. The proxy attaches it to `req.us
 
 The full app is functional end-to-end in mock mode with **no AWS credentials**. This is the dev default and the integration-test default.
 
-### 4.4 Cognito mode (v2, [#1](https://github.com/chris-arsenault/athena-s3-web-shell/issues/1))
+### 4.4 Cognito mode (implemented — demo deployment)
 
-Designed but not implemented. The intended flow:
+Implemented and live. The actual flow:
 
-1. SPA boots, has no token → `CognitoAuthProvider.getContext()` redirects to Cognito Hosted UI
-2. Cognito hands off to Entra ID (SAML or OIDC) for the actual auth ceremony
-3. Entra returns to Cognito; Cognito returns to the SPA with an ID token
-4. SPA exchanges the ID token for STS credentials via Cognito Identity Pool → these go to `getCredentials()` for browser-direct S3
-5. SPA passes the ID token as `Authorization: Bearer <jwt>` on every `/api/*` call
-6. Proxy verifies the JWT via `aws-jwt-verify` against cached Cognito JWKS, derives `AuthContext` from claims, attaches `req.user`
-7. (Per [#2](https://github.com/chris-arsenault/athena-s3-web-shell/issues/2)) Proxy then calls `STS.AssumeRoleWithWebIdentity` to get per-user creds for AWS calls — IAM, not app code, enforces scope
+1. SPA boots on `https://shell.ahara.io/…` — no session → `CognitoAuthProvider.getContext()` triggers `signInRedirect()`.
+2. Redirect to Cognito Hosted UI at `https://auth.services.ahara.io/oauth2/authorize` with PKCE (`code_challenge` + `code_challenge_method=S256`). Code verifier + state are stored in `sessionStorage`.
+3. User authenticates. (Demo uses direct Cognito users; Entra federation is a commented `aws_cognito_identity_provider` placeholder in `infrastructure/terraform/cognito.tf` — no code change needed when promoting to SSO.)
+4. Cognito 302s back to `https://shell.ahara.io/auth/callback?code=…&state=…`.
+5. `CallbackView` reads code + state (single-shot: `useRef` latch + `history.replaceState` scrub), POSTs to `/oauth2/token` with the PKCE verifier, stores the resulting ID + access + refresh tokens in `sessionStorage`, navigates to the original URL.
+6. Any `/api/*` request carries `Authorization: Bearer <id_token>`. **ALB's `jwt-validation` action** on the listener rule (`alb.tf` priority 220) verifies signature + issuer + expiry against Cognito's JWKS at the edge; rejects with 401 on failure, forwards on success.
+7. Proxy's `AlbAuthProvider` reads the same bearer token, decodes the JWT payload (no re-verification — ALB already did it), and derives `AuthContext` **deterministically** from the `cognito:username` claim:
+   - `workgroup = ${NAME_PREFIX}-${username}` (matches per-user workgroups in `athena.tf`)
+   - `s3 prefix = users/${username}/`
+   - `roleArn   = arn:aws:iam::${acct}:role/${NAME_PREFIX}-user-${username}`
+   No DynamoDB lookup — the "trust the identity provider" principle. The only authoritative map is the resource-name ↔ username convention itself.
+8. For browser-direct S3, `CognitoAuthProvider.getCredentials()` calls `fromCognitoIdentityPool({ logins: { cognito-idp...: idToken } })`. The Identity Pool's rule-based mapping (`identity-pool.tf`) dispatches each user to their dedicated IAM role (`iam-user-roles.tf`); the role's policy is scoped to `users/<username>/*` on the data bucket. Per-user AWS scoping is **IAM-enforced** at the credentials layer — the proxy never handles STS.
 
-Because the abstraction is in place, swapping providers is a one-line change in `App.tsx` and `middleware/authenticate.ts`.
+ALB's `jwt-validation` action does not inject `x-amzn-oidc-*` headers without `ClaimsMapping` configured, and AWS provider 6.41 doesn't expose `ClaimsMapping` yet. The proxy reads the token directly from `Authorization: Bearer …` — works with or without claims mapping, forward-compatible once the provider catches up.
+
+#### Three gates against silent-mock deployment
+
+1. **Fargate task env** hard-codes `AUTH_PROVIDER=alb` (+ `MOCK_AUTH=0`). Proxy refuses to start without the five alb-mode vars.
+2. **ALB `jwt-validation`** rejects unauthenticated `/api/*` at the edge.
+3. **SPA build** bakes `VITE_AUTH_PROVIDER=cognito` — a mock-mode proxy (which expects `X-Mock-User`) 401s every bearer-token request, so the SPA can't silently fall into mock.
+
+#### Swapping to Entra SSO
+
+`infrastructure/terraform/cognito.tf` contains a commented `aws_cognito_identity_provider "entra"` block (SAML + OIDC examples). To federate:
+1. Uncomment the block, populate the metadata URL / OIDC issuer.
+2. Add `"Entra"` to `supported_identity_providers` on the app client.
+3. Delete `users.tf` (federated users are provisioned on first login).
+4. Switch the Identity Pool rule-based mapping (in `identity-pool.tf`) from `cognito:username Equals <user>` to `cognito:groups Contains <group>` — per-team roles replace per-user roles.
+
+No code changes on the proxy or SPA — both are claims-based and the claim names are stable under federation.
 
 ---
 

@@ -13,6 +13,7 @@
   "dependencies": {
     "@athena-shell/shared": "workspace:*",
     "@aws-sdk/client-s3": "^3.717.0",
+    "@aws-sdk/credential-providers": "^3.717.0",
     "@aws-sdk/lib-storage": "^3.717.0",
     "idb": "^8.0.1",
     "monaco-editor": "^0.52.2",

@@ -79,20 +79,55 @@ Styling:
 - Aesthetic: "operator console" — warm ink ground, rust brand, phosphor accent, monospace typography. Don't revert to generic dark-SaaS tokens.
 - Utility classes for layout: `.flex-row`, `.flex-col`, `.gap-2`, `.ml-auto`, `.text-muted`, `.tnum`, `.tracked`, `.truncate` etc. Defined in `src/index.css`. **See gotcha #9 for the `.flex-row` centering pitfall.**
 
-## Auth model: Mock vs Cognito
+## Auth model: Mock vs Cognito (both implemented)
 
-There is one `AuthProvider` interface and two implementations.
+There's one `AuthProvider` interface in the SPA and another in the proxy. Each has a mock and a real implementation. The build-time env selects which.
 
-**`MockAuthProvider`** (default in v1):
-- Returns a hardcoded dev identity (`dev-user`, bucket `athena-shell-dev`, prefix `users/dev/`, workgroup `primary`)
-- `isMock()` returns `true` — repos check this and route to `mockS3Store` and `mockAthena` (in-memory fakes) instead of real AWS
-- The proxy's `MockAuthProvider` reads `X-Mock-User` header against `MOCK_USERS_JSON` env var; defaults to a single `dev-user`
+### Web side — `packages/web/src/auth/`
 
-**`CognitoAuthProvider`** (stub, [#1](https://github.com/chris-arsenault/athena-s3-web-shell/issues/1)):
-- Currently throws "not implemented"
-- v2 will: hosted-UI redirect for SAML/OIDC via Entra → STS creds via Cognito Identity Pool → JWT bearer to proxy → proxy verifies via `aws-jwt-verify`
+| File | Role |
+|---|---|
+| `AuthProvider.ts` | Interface: `getContext`, `getCredentials`, `getProxyAuthHeader`, `isMock`, `signOut` |
+| `MockAuthProvider.ts` | Dev path. `isMock() === true`, repos route to `mockS3Store` / `mockAthena` |
+| `CognitoAuthProvider.ts` | Real path. Hosted UI + PKCE (hand-rolled, not Amplify, not `oidc-client-ts`). Identity-Pool-minted STS creds for browser-direct S3 via `fromCognitoIdentityPool` |
+| `pkce.ts` | `window.crypto.subtle` SHA-256 + base64url. No dependency |
+| `oidcSession.ts` | Token storage in `sessionStorage`; PKCE transient store for the code-verifier across the redirect |
+| `provider.ts` | Singleton selected at import time from `VITE_AUTH_PROVIDER` (default `mock`). Throws at module load if `cognito` is selected but any of the five required `VITE_COGNITO_*` env vars is missing |
 
-Both are wired in `App.tsx` and `middleware/authenticate.ts`. To swap, change which class is instantiated (eventually env-driven).
+### Proxy side — `packages/proxy/src/auth/`
+
+| File | Role |
+|---|---|
+| `authProvider.ts` | Interface: `resolve(req) → AuthContext` |
+| `mockAuthProvider.ts` | Dev path. Reads `X-Mock-User` header against `MOCK_USERS_JSON` env |
+| `albAuthProvider.ts` | Real path. Decodes the JWT from `Authorization: Bearer …` (ALB validated the signature at the edge; we trust it and just pull claims). Derives workgroup / S3 prefix / role ARN deterministically from `cognito:username` — **no DynamoDB lookup**. See "trust the identity provider" — the resource-name convention itself is the source of truth |
+
+Proxy provider is env-selected by `AUTH_PROVIDER` (`alb` | `mock`, default `mock`). Setting `alb` requires five env vars (`AWS_ACCOUNT_ID`, `NAME_PREFIX`, `DATA_BUCKET`, `RESULTS_BUCKET`, `GLUE_DATABASE`) or startup throws.
+
+### The full flow (deployed path)
+
+```
+SPA load → <AuthGate> → provider.getContext()
+  └── no session   → signInRedirect()
+       └── /oauth2/authorize w/ PKCE code_challenge
+            └── user logs in at Hosted UI
+                 └── 302 back to /auth/callback?code=…
+                      └── CallbackView completeSignIn(code)
+                           └── POST /oauth2/token w/ code_verifier
+                                └── ID + access + refresh tokens → sessionStorage
+                                     └── navigate to original URL
+
+/api/*  →  Authorization: Bearer <id_token>
+  ALB jwt-validation (iss + JWKS + exp) — forwards on success, 401 on failure
+  Proxy AlbAuthProvider decodes the same header, derives AuthContext
+
+S3 (browser-direct) →
+  fromCognitoIdentityPool(idToken) → Identity Pool role mapping → per-user STS creds → S3Client
+```
+
+The proxy **never handles STS**. Per-user AWS scoping comes from the Identity Pool + per-user IAM roles on the browser side; the proxy uses its own task role for Athena/Glue (scoped to the per-user workgroup derived from the claim).
+
+See `infrastructure/README.md` + `docs/architecture.md` §4 for the full Terraform side.
 
 ## API shape
 
@@ -129,6 +164,11 @@ These bit me during the initial build. They'll bite you too.
 9. **`.flex-row` sets `align-items: center`.** Great for toolbars and inline rows of mixed-height content — wrong for layout containers. If a flex row is meant to hold nav+main or sidebar+panels that should fill their parent's height, override with `align-items: stretch` (see `.console-body` in `AppShell.css` and `.query-view` in `QueryView.css`). Otherwise children collapse to content height and the rest of the viewport goes empty.
 10. **Monaco custom theme + completion provider register globally.** `SqlEditorImpl` defines the `athena-shell-dark` theme once (guarded by a module flag) and registers the SQL `CompletionItemProvider` on mount. Both must be disposed on unmount, which the cleanup effect does. If you add a second editor or a second provider, remember the registration is global — two mounted editors = duplicate suggestions.
 11. **Schema cache is shared via `SchemaProvider`.** `data/schemaContext.tsx` owns the single copy of databases / tables / columns for a QueryView session; `SchemaTree` and the Monaco completion provider both read from it via `useSchema()`. Don't call `schemaRepo.*` directly from QueryView descendants — you'd create a divergent cache. `SchemaProvider` eager-loads dbs + tables in parallel on mount; columns lazy-load via `loadColumns(db, table)` on first reference (tree expand or `tbl.` autocomplete).
+12. **ALB `jwt-validation` action does NOT inject `x-amzn-oidc-*` headers** unless the listener rule has `ClaimsMapping` configured — and aws provider 6.41 doesn't expose that attribute yet. Upshot: `AlbAuthProvider` reads the JWT straight from `Authorization: Bearer …` and decodes the payload (no signature re-check — ALB validated). Don't assume the oidc-identity header exists; don't add `aws-jwt-verify` either, that's wasted work behind an already-validating edge.
+13. **Authorization codes are single-use.** Cognito invalidates the code on the first `/oauth2/token` call, success or failure. Any retry gets `invalid_grant`. `CallbackView` guards this two ways: a `useRef` latch prevents double-invocation of the effect, and `history.replaceState` scrubs the `?code=…` from the URL on entry. If you touch the callback component, preserve both — missing either reintroduces the bug.
+14. **`replace(name, "/...pattern.../", "")` in Terraform is regex mode.** `replace()` treats any pattern wrapped in forward slashes as a regex — the outer slashes are delimiters, not literals. For path manipulation use `basename()` or `trimprefix()` instead. We hit this via the ahara-infra `auth-trigger` client-map bug (fixed in their repo); don't replicate the pattern here.
+15. **Deploying to the ahara account requires two applies.** `./scripts/deploy.sh` writes our SSM entry at `/ahara/auth-trigger/clients/athena-shell`, but ahara-infra's own `terraform apply` is what regenerates the consolidated `/ahara/auth-trigger/client-map` the pre-auth Lambda reads. After first deploy (or Cognito client recreation), run the ahara-infra apply too. Warm Lambda containers cache the map for up to ~15 min — force a cold-start via `aws lambda update-function-configuration --function-name ahara-auth-trigger --description "refresh $(date +%s)"` if you need immediacy. `infrastructure/README.md` has the full ritual.
+16. **Don't use Amplify.** The entire `packages/web/src/auth/` module is hand-rolled (PKCE, Identity Pool credential provider, session storage) specifically to avoid it. If someone tries to `pnpm add aws-amplify` as a shortcut, revert.
 
 ## Where to add things
 
@@ -144,6 +184,10 @@ These bit me during the initial build. They'll bite you too.
 | A new mock fixture | Extend `packages/web/src/data/mockS3Store.ts` or `mockAthena.ts` |
 | A new consumer of schema data (dbs/tables/columns) | Call `useSchema()` from `data/schemaContext.tsx` — don't call `schemaRepo` directly inside QueryView descendants. Extend `SchemaValue` there if you need new derived state. |
 | A new Monaco feature (hover, signature, snippets) | Register inside `SqlEditorImpl`'s mount effect; dispose in the cleanup. Keep the pure logic in a sibling module (see `sqlCompletions.ts` as the pattern). |
+| A new AWS resource in the demo deployment | `infrastructure/terraform/` as a dedicated `.tf` file (verbosity preferred over ahara-tf-patterns modules in this repo). Follow the naming + tagging conventions already in place. Update `outputs.tf` if the deploy script needs the value. |
+| A new claim-derived AuthContext field | Add to `AlbAuthProvider.resolve()` — derive it from a Cognito claim rather than adding a lookup table. "Trust the identity provider" — the JWT is the source of truth for who a user is, Terraform's naming convention is the source of truth for what their resources are called. See gotcha #14 re: `replace()` regex mode if derivation involves string manipulation. |
+| A new env var read by the deployed proxy | Add to `ecs.tf`'s `environment` list AND to `config.ts`. `AUTH_PROVIDER=alb` requires the five alb-mode vars or startup throws — keep that behavior intact if you add more. |
+| A new Cognito client, identity provider, or role mapping rule | `infrastructure/terraform/{cognito,identity-pool,iam-user-roles}.tf`. Entra federation is a commented placeholder; the swap is mechanical (see the inline `# FUTURE (SSO)` notes). |
 
 ## Testing posture
 

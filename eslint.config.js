@@ -94,7 +94,16 @@ export default [
   },
 
   {
-    files: ["packages/web/src/data/api.ts", "**/*.test.{ts,tsx}", "**/test/**/*"],
+    // Auth module hits Cognito's /oauth2/token directly (not /api/*), so the
+    // no-direct-fetch rule is lifted here. Everything else must still go
+    // through data/api.ts.
+    files: [
+      "packages/web/src/data/api.ts",
+      "packages/web/src/auth/**/*.ts",
+      "packages/web/src/auth/**/*.tsx",
+      "**/*.test.{ts,tsx}",
+      "**/test/**/*",
+    ],
     rules: { "local/no-direct-fetch": "off" },
   },
 

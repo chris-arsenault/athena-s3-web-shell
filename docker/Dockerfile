@@ -17,6 +17,33 @@ RUN pnpm install --frozen-lockfile=false
 
 COPY . .
 
+# ---------------------------------------------------------------------------
+# SPA build-time auth configuration.
+#
+# Default: "mock" — so `make docker` + `make docker-run` locally produces a
+# container that serves a mock-backed SPA (matches the dev `MOCK_AUTH=1`
+# flow).
+#
+# For a real deployment the deploy script (scripts/deploy.sh) passes
+# `--build-arg VITE_AUTH_PROVIDER=cognito` along with the five
+# VITE_COGNITO_* args sourced from terraform outputs. Missing any of them
+# when VITE_AUTH_PROVIDER=cognito makes the SPA throw at module load —
+# intentional, as the backstop against "deployed build is silently mock."
+# ---------------------------------------------------------------------------
+ARG VITE_AUTH_PROVIDER=mock
+ARG VITE_COGNITO_REGION=
+ARG VITE_COGNITO_USER_POOL_ID=
+ARG VITE_COGNITO_CLIENT_ID=
+ARG VITE_COGNITO_IDENTITY_POOL_ID=
+ARG VITE_COGNITO_DOMAIN=
+
+ENV VITE_AUTH_PROVIDER=${VITE_AUTH_PROVIDER} \
+    VITE_COGNITO_REGION=${VITE_COGNITO_REGION} \
+    VITE_COGNITO_USER_POOL_ID=${VITE_COGNITO_USER_POOL_ID} \
+    VITE_COGNITO_CLIENT_ID=${VITE_COGNITO_CLIENT_ID} \
+    VITE_COGNITO_IDENTITY_POOL_ID=${VITE_COGNITO_IDENTITY_POOL_ID} \
+    VITE_COGNITO_DOMAIN=${VITE_COGNITO_DOMAIN}
+
 RUN pnpm --filter @athena-shell/shared build \
  && pnpm --filter @athena-shell/web build \
  && pnpm --filter @athena-shell/proxy build
