@@ -4,6 +4,7 @@ import { RESULTS_PAGE_SIZE } from "@athena-shell/shared";
 
 import { createAthenaClient } from "../aws/athenaClient.js";
 import type { ProxyConfig } from "../config.js";
+import { audit } from "../services/audit.js";
 import {
   getQuery,
   getResults,
@@ -11,6 +12,8 @@ import {
   stopQuery,
 } from "../services/queryService.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+
+const TERMINAL_STATES = new Set(["SUCCEEDED", "FAILED", "CANCELLED"]);
 
 export function queryRouter(config: ProxyConfig): Router {
   const r = Router();
@@ -28,6 +31,12 @@ export function queryRouter(config: ProxyConfig): Router {
         sql,
         database: req.body?.database,
       });
+      audit.queryStart(req, {
+        sql,
+        database: req.body?.database,
+        workgroup: req.user!.athena.workgroup,
+        executionId: result.executionId,
+      });
       res.json(result);
     })
   );
@@ -36,6 +45,16 @@ export function queryRouter(config: ProxyConfig): Router {
     "/:id",
     asyncHandler(async (req, res) => {
       const status = await getQuery(athena, req.params.id!);
+      if (TERMINAL_STATES.has(status.state)) {
+        audit.queryEnd(req, {
+          executionId: status.executionId,
+          state: status.state,
+          stateChangeReason: status.stateChangeReason,
+          dataScannedBytes: status.stats?.dataScannedBytes,
+          totalExecutionMs: status.stats?.totalExecutionMs,
+          completedAt: status.completedAt,
+        });
+      }
       res.json(status);
     })
   );
@@ -44,6 +63,7 @@ export function queryRouter(config: ProxyConfig): Router {
     "/:id",
     asyncHandler(async (req, res) => {
       await stopQuery(athena, req.params.id!);
+      audit.queryStop(req, { executionId: req.params.id! });
       res.json({ ok: true });
     })
   );
@@ -58,6 +78,11 @@ export function queryRouter(config: ProxyConfig): Router {
         req.query.nextToken as string | undefined,
         max
       );
+      audit.queryResults(req, {
+        executionId: req.params.id!,
+        rowCount: page.rows.length,
+        hasMore: !!page.nextToken,
+      });
       res.json(page);
     })
   );

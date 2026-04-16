@@ -3,6 +3,7 @@ import { Router } from "express";
 import { createAthenaClient } from "../aws/athenaClient.js";
 import { createS3Client } from "../aws/s3Client.js";
 import type { ProxyConfig } from "../config.js";
+import { audit } from "../services/audit.js";
 import { getQuery } from "../services/queryService.js";
 import { presignResultsDownload } from "../services/resultsService.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -21,6 +22,10 @@ export function resultsRouter(config: ProxyConfig): Router {
         return;
       }
       const url = await presignResultsDownload(s3, status.outputLocation);
+      audit.queryDownload(req, {
+        executionId: req.params.id!,
+        outputLocation: status.outputLocation,
+      });
       res.json({ url });
     })
   );

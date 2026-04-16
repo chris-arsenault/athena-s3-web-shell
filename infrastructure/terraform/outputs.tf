@@ -66,6 +66,16 @@ output "ecs_service_name" {
   value = aws_ecs_service.proxy.name
 }
 
+output "cloudtrail_bucket" {
+  description = "Bucket holding S3 CloudTrail data-event logs. Query with Athena over the AWSLogs/<acct>/CloudTrail/ prefix."
+  value       = aws_s3_bucket.cloudtrail.id
+}
+
+output "cloudtrail_name" {
+  description = "CloudTrail trail name. Enabled on the data + results buckets for object-level audit."
+  value       = aws_cloudtrail.s3_data_events.name
+}
+
 # ============================================================================
 # Secrets — sensitive; retrieve with `terraform output -json test_user_passwords`
 # ============================================================================

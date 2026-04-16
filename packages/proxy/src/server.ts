@@ -4,6 +4,7 @@ import morgan from "morgan";
 import type { ProxyConfig } from "./config.js";
 import { authenticate } from "./middleware/authenticate.js";
 import { errorHandler } from "./middleware/errorHandler.js";
+import { requestId } from "./middleware/requestId.js";
 import { datasetsRouter } from "./routes/datasets.js";
 import { healthRouter } from "./routes/health.js";
 import { sessionRouter } from "./routes/session.js";
@@ -13,11 +14,25 @@ import { historyRouter } from "./routes/history.js";
 import { resultsRouter } from "./routes/results.js";
 import { mountSpa } from "./static/serveSpa.js";
 
+// Register a morgan token for the request id so HTTP access logs can
+// be joined against audit events on the same field.
+morgan.token("rid", (req) => (req as express.Request).requestId ?? "-");
+
+// morgan's "combined" format + a leading [rid] so CloudWatch Logs
+// Insights joins trivially against audit events.
+const MORGAN_FORMAT =
+  '[:rid] :remote-addr - :remote-user [:date[clf]] ":method :url HTTP/:http-version" :status :res[content-length] ":referrer" ":user-agent"';
+
 export function createServer(config: ProxyConfig): express.Express {
   const app = express();
   app.disable("x-powered-by");
+  // Behind ahara's ALB. Makes req.ip the real client IP (leftmost
+  // X-Forwarded-For entry) instead of the ALB's VPC interface.
+  app.set("trust proxy", true);
+
+  app.use(requestId());
   app.use(express.json({ limit: "1mb" }));
-  app.use(morgan("combined"));
+  app.use(morgan(MORGAN_FORMAT));
 
   app.use("/api/health", healthRouter());
 

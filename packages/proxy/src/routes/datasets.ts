@@ -5,6 +5,7 @@ import type { AuthContext, DatasetFileType } from "@athena-shell/shared";
 import { createAthenaClient } from "../aws/athenaClient.js";
 import { createS3Client } from "../aws/s3Client.js";
 import type { ProxyConfig } from "../config.js";
+import { audit } from "../services/audit.js";
 import { createTable, inferSchema } from "../services/datasetsService.js";
 import { sanitizeIdent } from "../services/ddlTemplates.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -44,6 +45,11 @@ export function datasetsRouter(config: ProxyConfig): Router {
         params.fileType,
         params.sampleBytes
       );
+      audit.datasetsInfer(req, {
+        bucket: params.bucket,
+        key: params.key,
+        fileType: params.fileType,
+      });
       res.json(response);
     })
   );
@@ -64,6 +70,13 @@ export function datasetsRouter(config: ProxyConfig): Router {
         fileType: payload.fileType,
         columns: payload.columns,
         skipHeader: payload.skipHeader ?? true,
+      });
+      audit.datasetsCreateTable(req, {
+        database: response.database,
+        table: response.table,
+        location: payload.location,
+        fileType: payload.fileType,
+        executionId: response.executionId,
       });
       res.json(response);
     })
