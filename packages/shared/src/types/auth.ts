@@ -14,6 +14,8 @@ export interface AthenaScope {
   workgroup: string;
   outputLocation: string;
   defaultDatabase?: string;
+  /** Per-user database where tables created via the datasets endpoints land. */
+  userDatabase?: string;
 }
 
 export interface AuthContext {

@@ -70,6 +70,7 @@ export class AlbAuthProvider implements AuthProvider {
         workgroup: `${this.config.namePrefix}-${username}`,
         outputLocation: `s3://${this.config.resultsBucket}/${prefix}`,
         defaultDatabase: this.config.glueDatabase,
+        userDatabase: `workspace_${username}`,
       },
     };
   }

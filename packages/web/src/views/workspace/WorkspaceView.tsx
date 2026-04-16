@@ -1,51 +1,41 @@
 import { useCallback, useEffect, useState } from "react";
 
-import type { S3Listing } from "@athena-shell/shared";
+import type { DatasetFileType, S3Object } from "@athena-shell/shared";
 
 import { useAuth } from "../../auth/authContext";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { LoadingSpinner } from "../../components/LoadingSpinner";
+import { tableFileTypeFor } from "../../data/datasetsRepo";
 import {
   createFolder as createFolderRepo,
   deleteObject,
   downloadObject,
-  listFolder,
 } from "../../data/s3Repo";
 import { joinPrefix } from "../../utils/parseS3Path";
 import { Breadcrumb } from "./Breadcrumb";
+import { CreateTableModal } from "./CreateTableModal";
 import { FileBrowser } from "./FileBrowser";
 import { UploadDropzone } from "./UploadDropzone";
 import { UploadQueue } from "./UploadQueue";
+import { useFileListing } from "./useFileListing";
 import { useUploads } from "./useUploads";
 import "./WorkspaceView.css";
+
+interface RegisterTarget {
+  file: S3Object;
+  fileType: DatasetFileType;
+}
 
 export function WorkspaceView() {
   const { provider, context, loading } = useAuth();
   const [prefix, setPrefix] = useState<string>("");
-  const [listing, setListing] = useState<S3Listing | null>(null);
-  const [error, setError] = useState<Error | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
+  const { listing, error, setError, refresh } = useFileListing(provider, context, prefix);
+  const [registering, setRegistering] = useState<RegisterTarget | null>(null);
   const uploads = useUploads({ provider, context, prefix, onComplete: refresh });
 
   useEffect(() => {
     if (context && !prefix) setPrefix(context.s3.prefix);
   }, [context, prefix]);
-
-  useEffect(() => {
-    if (!context || !prefix) return;
-    let cancelled = false;
-    listFolder(provider, context, prefix)
-      .then((l) => {
-        if (!cancelled) setListing(l);
-      })
-      .catch((e: Error) => {
-        if (!cancelled) setError(e);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [provider, context, prefix, refreshKey]);
 
   const onCreateFolder = useCallback(
     async (name: string) => {
@@ -74,6 +64,11 @@ export function WorkspaceView() {
     [provider, context]
   );
 
+  const onRegisterTable = useCallback((obj: S3Object) => {
+    const fileType = tableFileTypeFor(obj.name);
+    if (fileType) setRegistering({ file: obj, fileType });
+  }, []);
+
   if (loading || !context) return <LoadingSpinner label="Loading workspace…" />;
 
   return (
@@ -89,7 +84,19 @@ export function WorkspaceView() {
         onOpen={setPrefix}
         onDelete={onDelete}
         onDownload={onDownload}
+        onRegisterTable={onRegisterTable}
       />
+      {registering && (
+        <CreateTableModal
+          file={registering.file}
+          fileType={registering.fileType}
+          onClose={() => setRegistering(null)}
+          onCreated={() => {
+            setRegistering(null);
+            refresh();
+          }}
+        />
+      )}
     </div>
   );
 }

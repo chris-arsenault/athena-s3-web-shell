@@ -8,6 +8,9 @@ import type {
   TableRef,
 } from "@athena-shell/shared";
 
+// In-memory mutable catalog so table-creation flows (issue #5) appear in
+// the schema tree under MOCK_AUTH=1. Tables added via `registerMockTable`
+// go under a new workspace_* database on first use.
 const DATABASES: DatabaseRef[] = [
   { name: "default", description: "Default database" },
   { name: "sales", description: "Sales data" },
@@ -23,6 +26,41 @@ const TABLES: Record<string, TableRef[]> = {
     { name: "customers", database: "sales", type: "EXTERNAL_TABLE" },
   ],
 };
+
+/**
+ * Adds a user-created table to the mock catalog AND seeds an execution
+ * record for the DDL so the SPA's polling loop sees a SUCCEEDED state.
+ */
+export function registerMockTable(
+  ref: TableRef,
+  detail: TableDetail,
+  executionId: string
+): void {
+  if (!DATABASES.some((d) => d.name === ref.database)) {
+    DATABASES.push({ name: ref.database, description: "User workspace" });
+  }
+  const bucket = TABLES[ref.database] ?? (TABLES[ref.database] = []);
+  const existing = bucket.findIndex((t) => t.name === ref.name);
+  if (existing >= 0) bucket[existing] = ref;
+  else bucket.push(ref);
+  TABLE_DETAILS[`${ref.database}.${ref.name}`] = detail;
+
+  const now = new Date().toISOString();
+  executions.set(executionId, {
+    status: {
+      executionId,
+      state: "SUCCEEDED",
+      submittedAt: now,
+      completedAt: now,
+      workgroup: "primary",
+      database: ref.database,
+      sql: `CREATE EXTERNAL TABLE ${ref.database}.${ref.name} (...)`,
+      stats: { dataScannedBytes: 0, totalExecutionMs: 50 },
+    },
+    results: { columns: [], rows: [] },
+    startedAt: Date.now() - 2000, // pre-aged so it registers as SUCCEEDED
+  });
+}
 
 const TABLE_DETAILS: Record<string, TableDetail> = {
   "default.events": {
