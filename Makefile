@@ -6,6 +6,9 @@ install:
 ci: typecheck lint test build
 	@echo "==> CI passed (typecheck + lint + test + build)"
 
+e2e:
+	pnpm --filter @athena-shell/e2e run e2e
+
 dev:
 	pnpm dev
 

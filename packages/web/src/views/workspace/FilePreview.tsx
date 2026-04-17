@@ -46,7 +46,13 @@ export function FilePreview({ file, onClose }: Props) {
 
   return (
     <div className="fp-backdrop">
-      <div className="fp-drawer reg" role="dialog" aria-modal="true" aria-label={`Preview of ${file.name}`}>
+      <div
+        className="fp-drawer reg"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Preview of ${file.name}`}
+        data-testid="fp-drawer"
+      >
         <PreviewHeader file={file} onClose={onClose} truncated={!!content?.truncated} />
         <div className="fp-body">
           {error && <ErrorPanel message={error.message} />}

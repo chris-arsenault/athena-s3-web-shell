@@ -50,8 +50,9 @@ function ConsoleNav() {
 }
 
 function NavItem({ to, index, label, hint }: NavSpec) {
+  const testId = `nav-link-${to.replace(/^\//, "")}`;
   return (
-    <NavLink to={to} className="console-nav-link">
+    <NavLink to={to} className="console-nav-link" data-testid={testId}>
       {({ isActive }) => (
         <>
           <span className="nav-mark" aria-hidden data-active={isActive} />

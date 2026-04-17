@@ -1,8 +1,19 @@
-import * as monaco from "monaco-editor";
+import type * as monaco from "monaco-editor";
 
 import type { Column, DatabaseRef, TableRef } from "@athena-shell/shared";
 
 import type { SchemaValue } from "../../data/schemaContext";
+
+// Runtime copy of monaco.languages.CompletionItemKind — inlined so this
+// module has no runtime import of monaco-editor (keeps it cleanly
+// testable in Vitest without a full monaco bundle load). Values are the
+// public enum members; checked against the monaco type below.
+const KIND = {
+  Keyword: 17,
+  Module: 8,
+  Class: 6,
+  Field: 4,
+} as const satisfies Record<string, monaco.languages.CompletionItemKind>;
 
 const SQL_KEYWORDS = [
   "SELECT", "FROM", "WHERE", "GROUP BY", "ORDER BY", "LIMIT", "HAVING",
@@ -93,7 +104,7 @@ function pushKeywords(items: Items, range: monaco.IRange): void {
   for (const kw of SQL_KEYWORDS) {
     items.push({
       label: kw,
-      kind: monaco.languages.CompletionItemKind.Keyword,
+      kind: KIND.Keyword,
       insertText: kw,
       range,
       sortText: `9_${kw}`,
@@ -138,7 +149,7 @@ function pushColumns(
 function databaseItem(db: DatabaseRef, range: monaco.IRange): monaco.languages.CompletionItem {
   return {
     label: db.name,
-    kind: monaco.languages.CompletionItemKind.Module,
+    kind: KIND.Module,
     insertText: db.name,
     detail: "database",
     documentation: db.description,
@@ -150,7 +161,7 @@ function databaseItem(db: DatabaseRef, range: monaco.IRange): monaco.languages.C
 function tableItem(t: TableRef, db: string, range: monaco.IRange): monaco.languages.CompletionItem {
   return {
     label: t.name,
-    kind: monaco.languages.CompletionItemKind.Class,
+    kind: KIND.Class,
     insertText: t.name,
     detail: `table · ${db}`,
     range,
@@ -161,7 +172,7 @@ function tableItem(t: TableRef, db: string, range: monaco.IRange): monaco.langua
 function columnItem(c: Column, tableKey: string, range: monaco.IRange): monaco.languages.CompletionItem {
   return {
     label: c.name,
-    kind: monaco.languages.CompletionItemKind.Field,
+    kind: KIND.Field,
     insertText: c.name,
     detail: `${c.type}  ·  ${tableKey}`,
     range,

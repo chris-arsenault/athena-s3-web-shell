@@ -73,6 +73,7 @@ function DbItem(p: DbItemProps) {
       <button
         className={`tree-row tree-db-row ${p.open ? "is-open" : ""}`}
         onClick={p.onToggle}
+        data-testid={`tree-db-${p.db.name}`}
       >
         <span className="tree-caret">{p.open ? "▾" : "▸"}</span>
         <span className="tree-idx">{String(p.index).padStart(2, "0")}</span>
@@ -86,6 +87,7 @@ function DbItem(p: DbItemProps) {
             return (
               <TblItem
                 key={t.name}
+                db={p.db.name}
                 table={t}
                 open={p.openTableKey === k}
                 columns={p.columnsByTable[k]}
@@ -100,18 +102,20 @@ function DbItem(p: DbItemProps) {
 }
 
 interface TblItemProps {
+  db: string;
   table: TableRef;
   open: boolean;
   columns?: Column[];
   onToggle: () => void;
 }
 
-function TblItem({ table, open, columns, onToggle }: TblItemProps) {
+function TblItem({ db, table, open, columns, onToggle }: TblItemProps) {
   return (
     <li>
       <button
         className={`tree-row tree-tbl-row ${open ? "is-open" : ""}`}
         onClick={onToggle}
+        data-testid={`tree-tbl-${db}-${table.name}`}
       >
         <span className="tree-caret">{open ? "▾" : "▸"}</span>
         <span className="tree-kind tree-kind-tbl">▤</span>

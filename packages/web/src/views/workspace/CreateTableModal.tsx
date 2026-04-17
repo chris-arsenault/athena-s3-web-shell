@@ -69,7 +69,7 @@ export function CreateTableModal({ file, fileType, onClose, onCreated }: Props) 
 
   return (
     <div className="ct-backdrop">
-      <div className="ct-modal reg" role="dialog" aria-modal="true">
+      <div className="ct-modal reg" role="dialog" aria-modal="true" data-testid="ct-modal">
         <ModalHeader onClose={onClose} disabled={creating} />
         <ModalMeta
           file={file}

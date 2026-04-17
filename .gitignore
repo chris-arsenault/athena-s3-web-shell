@@ -13,6 +13,11 @@ coverage
 .idea
 *.tsbuildinfo
 
+# playwright
+playwright-report/
+test-results/
+.playwright/
+
 # terraform
 .terraform/
 *.tfplan
