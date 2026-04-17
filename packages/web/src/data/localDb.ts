@@ -1,7 +1,10 @@
 import { openDB, type IDBPDatabase } from "idb";
 
 const DB_NAME = "athena-shell";
-const DB_VERSION = 1;
+// v2: drops the legacy `namedQueries` store. Saved queries now live in Athena
+// (workgroup-scoped) via the proxy; keeping a parallel IndexedDB copy would
+// drift.
+const DB_VERSION = 2;
 
 export interface Draft {
   id: number;
@@ -17,34 +20,20 @@ export interface Favorite {
   savedAt: string;
 }
 
-export interface NamedQuery {
-  id: number;
-  name: string;
-  sql: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
 let dbPromise: Promise<IDBPDatabase> | null = null;
 
 function getDb(): Promise<IDBPDatabase> {
   if (!dbPromise) {
     dbPromise = openDB(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        if (!db.objectStoreNames.contains("drafts")) {
-          const s = db.createObjectStore("drafts", { keyPath: "id", autoIncrement: true });
-          s.createIndex("updatedAt", "updatedAt");
+      upgrade(db, oldVersion) {
+        if (oldVersion < 1) {
+          const drafts = db.createObjectStore("drafts", { keyPath: "id", autoIncrement: true });
+          drafts.createIndex("updatedAt", "updatedAt");
+          const favorites = db.createObjectStore("favorites", { keyPath: "id", autoIncrement: true });
+          favorites.createIndex("executionId", "executionId", { unique: true });
         }
-        if (!db.objectStoreNames.contains("favorites")) {
-          const s = db.createObjectStore("favorites", { keyPath: "id", autoIncrement: true });
-          s.createIndex("executionId", "executionId", { unique: true });
-        }
-        if (!db.objectStoreNames.contains("namedQueries")) {
-          const s = db.createObjectStore("namedQueries", {
-            keyPath: "id",
-            autoIncrement: true,
-          });
-          s.createIndex("name", "name", { unique: true });
+        if (oldVersion < 2 && db.objectStoreNames.contains("namedQueries")) {
+          db.deleteObjectStore("namedQueries");
         }
       },
     });
@@ -91,27 +80,6 @@ export const favorites = {
       | undefined;
     if (!existing) return;
     await db.delete("favorites", existing.id);
-  },
-};
-
-export const namedQueries = {
-  async list(): Promise<NamedQuery[]> {
-    const db = await getDb();
-    return (await db.getAll("namedQueries")) as NamedQuery[];
-  },
-  async save(name: string, sql: string): Promise<number> {
-    const db = await getDb();
-    const now = new Date().toISOString();
-    return (await db.add("namedQueries", {
-      name,
-      sql,
-      createdAt: now,
-      updatedAt: now,
-    })) as number;
-  },
-  async remove(id: number): Promise<void> {
-    const db = await getDb();
-    await db.delete("namedQueries", id);
   },
 };
 

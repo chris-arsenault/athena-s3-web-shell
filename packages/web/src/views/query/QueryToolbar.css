@@ -123,6 +123,19 @@
   letter-spacing: 0.16em;
 }
 
+.qbtn-save {
+  padding: 8px 12px;
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.qbtn-save:not(:disabled) span[aria-hidden] {
+  color: var(--blueprint-500);
+}
+
 /* ── status readout ─────────────────────────────────────────── */
 .qbar-status {
   display: inline-flex;

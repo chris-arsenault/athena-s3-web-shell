@@ -12,6 +12,7 @@ import { schemaRouter } from "./routes/schema.js";
 import { queryRouter } from "./routes/query.js";
 import { historyRouter } from "./routes/history.js";
 import { resultsRouter } from "./routes/results.js";
+import { savedQueriesRouter } from "./routes/savedQueries.js";
 import { mountSpa } from "./static/serveSpa.js";
 
 // Register a morgan token for the request id so HTTP access logs can
@@ -44,6 +45,7 @@ export function createServer(config: ProxyConfig): express.Express {
   apiAuth.use("/query", resultsRouter(config));
   apiAuth.use("/history", historyRouter(config));
   apiAuth.use("/datasets", datasetsRouter(config));
+  apiAuth.use("/saved-queries", savedQueriesRouter(config));
   app.use("/api", apiAuth);
 
   if (config.staticDir) mountSpa(app, config.staticDir);

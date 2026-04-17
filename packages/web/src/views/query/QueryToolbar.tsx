@@ -5,9 +5,11 @@ interface Props {
   isRunning: boolean;
   onRun: () => void;
   onStop: () => void;
+  onSave: () => void;
+  canSave: boolean;
 }
 
-export function QueryToolbar({ status, isRunning, onRun, onStop }: Props) {
+export function QueryToolbar({ status, isRunning, onRun, onStop, onSave, canSave }: Props) {
   const lower = status.toLowerCase();
   const isIdle = lower === "idle" || lower === "";
   return (
@@ -39,6 +41,16 @@ export function QueryToolbar({ status, isRunning, onRun, onStop }: Props) {
       <button className="btn btn-danger qbtn-stop" onClick={onStop} disabled={!isRunning}>
         <span aria-hidden>■</span>
         <span>abort</span>
+      </button>
+
+      <button
+        className="btn qbtn-save"
+        onClick={onSave}
+        disabled={!canSave}
+        data-testid="qbtn-save"
+      >
+        <span aria-hidden>◆</span>
+        <span>save</span>
       </button>
 
       <div className="qbar-sweep" aria-hidden />
