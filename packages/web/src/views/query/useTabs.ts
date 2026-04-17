@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { session, tabs as tabsStore, type TabRecord } from "../../data/localDb";
 
@@ -26,6 +26,8 @@ export interface UseTabs {
   setActive: (id: string) => void;
   newTab: () => Tab;
   newTabWithSql: (sql?: string, name?: string) => Tab;
+  newBrowserTab: (prefix: string, name?: string) => Tab;
+  openBrowserTab: (prefix: string, name?: string) => Tab;
   closeTab: (id: string) => void;
   renameTab: (id: string, name: string) => void;
   patchTab: (id: string, patch: Partial<Tab>) => void;
@@ -51,17 +53,15 @@ export function useTabs(): UseTabs {
     void session.set(SESSION_ACTIVE_KEY, id);
   }, []);
 
-  const newTabWithSql = useCallback(
-    (sql?: string, name?: string): Tab => appendTab(setTabs, setActive, sql, name),
+  const builders = useMemo(
+    () => buildTabBuilders(setTabs, setActive),
     [setActive]
   );
-  const newTab = useCallback((): Tab => newTabWithSql(), [newTabWithSql]);
 
   const closeTab = useCallback(
     (id: string) => setTabs((prev) => closeFromList(prev, id, activeId, setActiveId)),
     [activeId]
   );
-
   const patchTab = useCallback((id: string, patch: Partial<Tab>) => {
     setTabs((prev) => {
       const next = prev.map((t) =>
@@ -72,24 +72,9 @@ export function useTabs(): UseTabs {
       return next;
     });
   }, []);
-
   const renameTab = useCallback(
     (id: string, name: string) => patchTab(id, { name }),
     [patchTab]
-  );
-
-  const openScratchpad = useCallback(
-    (key: string, name: string, content: string, etag?: string): Tab => {
-      let created = newTabRecord(0);
-      setTabs((prev) => {
-        const { next, tab } = openOrReuseScratchpadTab(prev, key, name, content, etag);
-        created = tab;
-        return next;
-      });
-      setActive(created.id);
-      return created;
-    },
-    [setActive]
   );
 
   const activeTab = tabs.find((t) => t.id === activeId) ?? null;
@@ -99,13 +84,56 @@ export function useTabs(): UseTabs {
     activeTab,
     ready,
     setActive,
-    newTab,
-    newTabWithSql,
+    newTab: builders.newTab,
+    newTabWithSql: builders.newTabWithSql,
+    newBrowserTab: builders.newBrowserTab,
+    openBrowserTab: builders.openBrowserTab,
+    openScratchpad: builders.openScratchpad,
     closeTab,
     renameTab,
     patchTab,
-    openScratchpad,
   };
+}
+
+type SetTabs = React.Dispatch<React.SetStateAction<Tab[]>>;
+
+function buildTabBuilders(setTabs: SetTabs, setActive: (id: string) => void) {
+  const newTabWithSql = (sql?: string, name?: string): Tab =>
+    appendTab(setTabs, setActive, sql, name);
+  const newTab = (): Tab => newTabWithSql();
+  const newBrowserTab = (prefix: string, name?: string): Tab =>
+    appendBrowserTab(setTabs, setActive, prefix, name);
+  const openBrowserTab = (prefix: string, name?: string): Tab =>
+    openOrReuseThen(setTabs, setActive, (prev) => openOrReuseBrowserTab(prev, prefix, name));
+  const openScratchpad = (
+    key: string,
+    name: string,
+    content: string,
+    etag?: string
+  ): Tab =>
+    openOrReuseThen(setTabs, setActive, (prev) =>
+      openOrReuseScratchpadTab(prev, key, name, content, etag)
+    );
+  return { newTab, newTabWithSql, newBrowserTab, openBrowserTab, openScratchpad };
+}
+
+function openOrReuseThen(
+  setTabs: SetTabs,
+  setActive: (id: string) => void,
+  pick: (prev: Tab[]) => { next: Tab[]; tab: Tab }
+): Tab {
+  let created = newTabRecord(0);
+  setTabs((prev) => {
+    const { next, tab } = pick(prev);
+    created = tab;
+    // React processes updaters + queued state updates within the same
+    // flush, so calling setActive here keeps the id in lockstep with
+    // the tabs update. Reading `created` from the outer closure after
+    // setTabs returns is a stale-read bug — the updater hasn't run yet.
+    setActive(tab.id);
+    return next;
+  });
+  return created;
 }
 
 function appendTab(
@@ -155,6 +183,57 @@ function openOrReuseScratchpadTab(
   };
   void tabsStore.upsert(tab);
   return { next: [...prev, tab], tab };
+}
+
+function appendBrowserTab(
+  setTabs: React.Dispatch<React.SetStateAction<Tab[]>>,
+  setActive: (id: string) => void,
+  prefix: string,
+  name?: string
+): Tab {
+  const base = newTabRecord(0);
+  const record: Tab = {
+    ...base,
+    kind: "browser",
+    prefix,
+    sql: "",
+    name: name ?? prefixDisplayName(prefix),
+  };
+  setTabs((prev) => {
+    const finalized: Tab = {
+      ...record,
+      order: prev.length,
+    };
+    void tabsStore.upsert(finalized);
+    return [...prev, finalized];
+  });
+  setActive(record.id);
+  return record;
+}
+
+function openOrReuseBrowserTab(
+  prev: Tab[],
+  prefix: string,
+  name?: string
+): { next: Tab[]; tab: Tab } {
+  const existing = prev.find((t) => t.kind === "browser" && t.prefix === prefix);
+  if (existing) return { next: prev, tab: existing };
+  const tab: Tab = {
+    ...newTabRecord(prev.length),
+    kind: "browser",
+    prefix,
+    sql: "",
+    name: name ?? prefixDisplayName(prefix),
+  };
+  void tabsStore.upsert(tab);
+  return { next: [...prev, tab], tab };
+}
+
+function prefixDisplayName(prefix: string): string {
+  const trimmed = prefix.replace(/\/$/, "");
+  if (!trimmed) return "/";
+  const last = trimmed.slice(trimmed.lastIndexOf("/") + 1);
+  return last || "/";
 }
 
 interface CancelTok {

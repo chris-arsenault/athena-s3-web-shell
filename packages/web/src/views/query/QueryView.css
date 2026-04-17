@@ -1,40 +1,129 @@
+/* PanelGroup is the root; it already fills its parent. */
 .query-view {
   height: 100%;
   width: 100%;
-  overflow: hidden;
   background: var(--ink-850);
-  align-items: stretch;
 }
 
+/* ── panel wrappers ────────────────────────────────────────── */
+.query-side-panel,
+.query-main-panel,
+.query-journal-panel {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+/* ── side panel (catalog / library / scratchpad) ───────────── */
 .query-side {
-  width: 248px;
-  flex-shrink: 0;
+  flex: 1 1 auto;
+  min-width: 0;
   border-right: 1px solid var(--color-border);
   background: var(--ink-800);
-  overflow: auto;
+  overflow: hidden;
 }
 
-.query-side > .catalog {
+.side-panel {
+  overflow-y: auto;
+}
+
+.side-section-body > .catalog,
+.side-section-body > .lib,
+.side-section-body > .sp {
   flex: 1 1 auto;
   min-height: 0;
+  padding-top: var(--s-2);
+  border-top: none;
 }
 
-.query-side > .lib {
-  flex-shrink: 0;
+.side-section-body .catalog-head,
+.side-section-body .catalog-rule,
+.side-section-body .lib-head,
+.side-section-body .lib-rule,
+.side-section-body .sp-head,
+.side-section-body .sp-rule {
+  display: none;
 }
 
+/* ── journal (right inspector) ──────────────────────────────── */
 .query-history {
-  width: 296px;
-  flex-shrink: 0;
+  flex: 1 1 auto;
+  min-width: 0;
   border-left: 1px solid var(--color-border);
   background: var(--ink-800);
   overflow: auto;
+  position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
+.query-history.is-collapsed {
+  overflow: hidden;
+}
+
+.journal-collapse {
+  position: absolute;
+  top: var(--s-2);
+  right: var(--s-2);
+  z-index: 2;
+  background: transparent;
+  border: 1px dashed var(--color-border);
+  color: var(--color-text-dim);
+  font-size: 10px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  border-radius: var(--r-1);
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+  transform: rotate(180deg);
+}
+
+.journal-collapse:hover {
+  color: var(--rust-400);
+  border-color: var(--rust-600);
+}
+
+.journal-expand {
+  all: unset;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: var(--s-3) 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  transition: color var(--dur-fast) var(--ease-out);
+  gap: var(--s-3);
+}
+
+.journal-expand:hover { color: var(--rust-400); }
+
+.journal-collapsed-label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 9.5px;
+  letter-spacing: 0.28em;
+  color: inherit;
+}
+
+.journal-collapsed-hint {
+  font-size: 10px;
+  color: inherit;
+  opacity: 0.6;
+}
+
+/* ── main area (tabs + panes) ──────────────────────────────── */
 .query-main-wrap {
   overflow: hidden;
   min-width: 0;
   min-height: 0;
+  flex: 1 1 auto;
 }
 
 .query-panes {
@@ -50,6 +139,7 @@
   position: absolute;
   inset: 0;
   display: flex;
+  flex-direction: column;
 }
 
 .query-main.is-hidden {
@@ -57,10 +147,22 @@
   pointer-events: none;
 }
 
-.query-editor {
-  flex: 1 1 50%;
+/* ── per-tab vertical split (editor / results) ───────────── */
+.query-split {
+  flex: 1 1 auto;
   min-height: 0;
-  border-bottom: 1px solid var(--color-border);
+}
+
+.query-editor-panel,
+.query-results-panel {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.query-editor {
+  flex: 1 1 auto;
+  min-height: 0;
   background: var(--ink-900);
   position: relative;
 }
@@ -77,4 +179,10 @@
   opacity: 0.25;
   pointer-events: none;
   z-index: 1;
+}
+
+.query-results-area {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }

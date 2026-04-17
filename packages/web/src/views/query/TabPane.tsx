@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 
 import type { HistoryEntry, SavedQuery } from "@athena-shell/shared";
 
 import { useAuth } from "../../auth/authContext";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { writeScratchpad } from "../../data/scratchpadRepo";
+import { BrowserTabPane } from "./BrowserTabPane";
 import { QueryToolbar } from "./QueryToolbar";
 import { ResultsPane } from "./ResultsPane";
 import { RunQueuePanel } from "./RunQueuePanel";
@@ -22,22 +24,32 @@ export interface ActiveTabHandle {
   runSql: (sql: string) => void;
 }
 
-export type ActiveHandleSlot = { current: ActiveTabHandle | null };
+/**
+ * Parent owns a map keyed by tab id; each SQL tab registers its own
+ * handle regardless of active/hidden state. Callers resolve via the
+ * current active id at click time, so tab activation doesn't race the
+ * effect schedule.
+ */
+export type HandleMap = { current: Map<string, ActiveTabHandle> };
 
 interface Props {
   tab: Tab;
   hidden: boolean;
   onPatch: (patch: Partial<Tab>) => void;
-  /** The active tab registers its imperative handle here so parent
-   *  handlers (e.g. "pick saved query" / "select from history") can
-   *  drive the correct editor without flowing through leaky
-   *  signal-as-state. Inactive tabs never register. */
-  activeHandleRef: ActiveHandleSlot;
+  /** Per-tab handle map owned by the parent — each tab registers by id. */
+  handleMap: HandleMap;
   onSavedQueryCreated: () => void;
   onScratchpadSaved: () => void;
 }
 
 export function TabPane(props: Props) {
+  if (props.tab.kind === "browser") {
+    return <BrowserTabPane tab={props.tab} hidden={props.hidden} onPatch={props.onPatch} />;
+  }
+  return <SqlTabPane {...props} />;
+}
+
+function SqlTabPane(props: Props) {
   const { tab, hidden, onPatch } = props;
   const { provider } = useAuth();
   const s = useQueryViewState({ provider, initialSql: tab.sql });
@@ -45,7 +57,7 @@ export function TabPane(props: Props) {
   const cursorOffsetRef = useRef<number>(0);
   useTabSync(s, tab, onPatch);
   const runSqlPeek = useCallback((sql: string) => s.runQueue.runAll([sql]), [s.runQueue]);
-  useActiveHandleRegistration(hidden, s.replaceSql, runSqlPeek, props.activeHandleRef);
+  useTabHandleRegistration(tab.id, s.replaceSql, runSqlPeek, props.handleMap);
   const onScratchpadSave = useScratchpadSave(tab, s, onPatch, setSaveError, props.onScratchpadSaved);
   const onSaved = useCallback(() => {
     s.setSaveOpen(false);
@@ -72,25 +84,49 @@ export function TabPane(props: Props) {
         onSaveFile={tab.source ? onScratchpadSave : undefined}
         fileDirty={fileDirty}
       />
-      <div className="query-editor">
-        <SqlEditor
-          value={s.sql}
-          onChange={s.setSql}
-          onRunAtCursor={s.runAtCursor}
-          onRunAll={s.runAll}
-          onRunSelection={s.runSelection}
-          onSave={tab.source ? onScratchpadSave : undefined}
-          onCursorChange={(offset) => {
-            cursorOffsetRef.current = offset;
-          }}
-        />
-      </div>
       {saveError && (
         <ErrorBanner
           error={new Error(saveError)}
           onDismiss={() => setSaveError(null)}
         />
       )}
+      <PanelGroup
+        direction="vertical"
+        autoSaveId="athena-shell.query-tabpane"
+        className="query-split"
+      >
+        <Panel id="editor" order={1} defaultSize={50} minSize={15} className="query-editor-panel">
+          <div className="query-editor">
+            <SqlEditor
+              value={s.sql}
+              onChange={s.setSql}
+              onRunAtCursor={s.runAtCursor}
+              onRunAll={s.runAll}
+              onRunSelection={s.runSelection}
+              onSave={tab.source ? onScratchpadSave : undefined}
+              onCursorChange={(offset) => {
+                cursorOffsetRef.current = offset;
+              }}
+            />
+          </div>
+        </Panel>
+        <PanelResizeHandle />
+        <Panel id="results" order={2} defaultSize={50} minSize={15} className="query-results-panel">
+          <TabPaneResultsArea s={s} />
+        </Panel>
+      </PanelGroup>
+      {s.saveOpen && (
+        <SaveQueryModal sql={s.sql} onClose={() => s.setSaveOpen(false)} onSaved={onSaved} />
+      )}
+    </div>
+  );
+}
+
+function noop() {}
+
+function TabPaneResultsArea({ s }: { s: S }) {
+  return (
+    <div className="query-results-area flex-col">
       <RunQueuePanel
         queue={s.runQueue.queue}
         selectedId={s.runQueue.selectedId}
@@ -103,14 +139,9 @@ export function TabPane(props: Props) {
         loadingMore={s.loadingMore}
         onLoadMore={s.onLoadMore}
       />
-      {s.saveOpen && (
-        <SaveQueryModal sql={s.sql} onClose={() => s.setSaveOpen(false)} onSaved={onSaved} />
-      )}
     </div>
   );
 }
-
-function noop() {}
 
 type S = ReturnType<typeof useQueryViewState>;
 
@@ -134,20 +165,23 @@ function useTabSync(
  * replace THIS tab's SQL without relying on leaky signal state that
  * re-fires on unrelated tab switches.
  */
-function useActiveHandleRegistration(
-  hidden: boolean,
+function useTabHandleRegistration(
+  tabId: string,
   replaceSql: (sql: string) => void,
   runSql: (sql: string) => void,
-  handleRef: ActiveHandleSlot
+  handleMap: HandleMap
 ): void {
-  useEffect(() => {
-    if (hidden) return;
+  // Register regardless of hidden state. Callers look up by active
+  // tab id so inactive-tab handles are always present but never
+  // invoked — no race with tab activation.
+  useLayoutEffect(() => {
     const handle: ActiveTabHandle = { replaceSql, runSql };
-    handleRef.current = handle;
+    handleMap.current.set(tabId, handle);
     return () => {
-      if (handleRef.current === handle) handleRef.current = null;
+      const cur = handleMap.current.get(tabId);
+      if (cur === handle) handleMap.current.delete(tabId);
     };
-  }, [hidden, replaceSql, runSql, handleRef]);
+  }, [tabId, replaceSql, runSql, handleMap]);
 }
 
 function useScratchpadSave(

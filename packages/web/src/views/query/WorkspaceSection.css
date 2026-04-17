@@ -1,0 +1,70 @@
+.ws-tree {
+  list-style: none;
+  margin: 0;
+  padding: var(--s-1) 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ws-row {
+  display: flex;
+}
+
+.ws-row-btn {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  /* --ws-indent is set per-row by the component to express depth. */
+  padding: 3px var(--s-3) 3px var(--ws-indent, var(--s-2));
+  width: 100%;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+  font-size: 11px;
+}
+
+.ws-row-btn:hover {
+  background: var(--ink-750);
+  color: var(--color-text);
+}
+
+.ws-row.is-active .ws-row-btn {
+  background: var(--ink-750);
+  color: var(--bone-100);
+}
+
+.ws-row-chev {
+  font-size: 9px;
+  width: 10px;
+  color: var(--color-text-dim);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.ws-row.is-active .ws-row-chev,
+.ws-row-btn:hover .ws-row-chev {
+  color: var(--rust-400);
+}
+
+.ws-row-glyph {
+  font-size: 10px;
+  color: var(--color-text-dim);
+  width: 10px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.ws-row.is-root .ws-row-glyph {
+  color: var(--rust-400);
+}
+
+.ws-row-name {
+  font-size: 11px;
+  color: inherit;
+  letter-spacing: 0.01em;
+  flex: 1;
+  min-width: 0;
+}

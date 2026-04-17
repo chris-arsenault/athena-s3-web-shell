@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { useTabsContext } from "./tabsContext";
+
 import type { Column, DatabaseRef, TableRef } from "@athena-shell/shared";
 
 import { useAuth } from "../../auth/authContext";
@@ -175,6 +177,7 @@ function TblItem({ db, table, open, columns, onToggle, onPeek }: TblItemProps) {
 
 function WorkspaceLink({ table }: { table: TableRef }) {
   const { context } = useAuth();
+  const tabsApi = useTabsContext();
   const navigate = useNavigate();
   if (!context) return null;
   const loc = locationToPrefix(table.location);
@@ -189,6 +192,8 @@ function WorkspaceLink({ table }: { table: TableRef }) {
       data-testid={`tree-link-workspace-${table.database}-${table.name}`}
       onClick={(e) => {
         e.stopPropagation();
+        tabsApi.openBrowserTab(loc.prefix);
+        // Mirror the active surface in the URL for deep-link / bookmark.
         navigate(`/workspace?prefix=${encodeURIComponent(loc.prefix)}`);
       }}
     >

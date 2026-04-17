@@ -18,6 +18,8 @@ export interface TabScratchpadSource {
   etag?: string;
 }
 
+export type TabKind = "sql" | "browser";
+
 export interface TabRecord {
   id: string;
   name: string;
@@ -28,6 +30,11 @@ export interface TabRecord {
   updatedAt: string;
   source?: TabScratchpadSource;
   savedSql?: string;
+  /** Optional — defaults to "sql" for back-compat with previously-persisted
+   *  records that predate the browser-tab kind. */
+  kind?: TabKind;
+  /** Only meaningful when kind === "browser": the S3 prefix this tab browses. */
+  prefix?: string;
 }
 
 export interface SessionEntry {

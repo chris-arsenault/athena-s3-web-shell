@@ -1,0 +1,99 @@
+/* Collapsible side-panel section — part of the unified IDE grammar.
+   Bracketed label + chevron + optional trailing meta chip. */
+
+.side-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.side-section:last-child {
+  border-bottom: none;
+}
+
+.side-section.is-grow {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.side-section-head {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  cursor: pointer;
+  border-bottom: 1px solid transparent;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+  position: relative;
+}
+
+.side-section:not(.is-collapsed) > .side-section-head {
+  border-bottom-color: var(--color-border);
+}
+
+.side-section-head::before {
+  /* rust rail on hover/expanded — matches the seam language on the header */
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: transparent;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.side-section:not(.is-collapsed) > .side-section-head::before {
+  background: var(--rust-500);
+  opacity: 0.55;
+  box-shadow: 0 0 6px var(--rust-500);
+}
+
+.side-section-head:hover {
+  background: var(--ink-750);
+}
+
+.side-section-chevron {
+  font-size: 9px;
+  width: 10px;
+  color: var(--color-text-dim);
+  line-height: 1;
+  font-family: var(--font-mono);
+}
+
+.side-section:not(.is-collapsed) > .side-section-head .side-section-chevron {
+  color: var(--rust-400);
+}
+
+.side-section-title {
+  font-size: 10px;
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.side-section-title::before { content: "[ "; color: var(--color-text-dim); }
+.side-section-title::after  { content: " ]"; color: var(--color-text-dim); }
+
+.side-section-meta {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--color-text-muted);
+  letter-spacing: 0.05em;
+}
+
+.side-section-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.side-section.is-grow > .side-section-body {
+  flex: 1 1 auto;
+  overflow: auto;
+}

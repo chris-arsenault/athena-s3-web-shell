@@ -105,6 +105,15 @@
   --radius-1: var(--r-1);
   --radius-2: var(--r-2);
 
+  /* ── layout regions — unified across views so the IDE-grammar
+     (rail → side panel → main → inspector) reads consistently ─── */
+  --rail-width: 52px;
+  --sidepanel-width: 256px;
+  --sidepanel-collapsed: 36px;
+  --inspector-width: 296px;
+  --inspector-collapsed: 36px;
+  --handle-thickness: 4px;
+
   /* ── motion ───────────────────────────────────────────────── */
   --dur-fast: 120ms;
   --dur-base: 220ms;
@@ -561,4 +570,73 @@ a:hover {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
+}
+
+/* ── resizable-panel handles ─────────────────────────────────
+   Thin seam that lights up rust on hover / drag. The handle
+   itself is 1px visually but has a larger hit area so it
+   catches the cursor without bumping neighbour widths. */
+[data-panel-resize-handle-enabled],
+[data-panel-resize-handle-id] {
+  position: relative;
+  flex: 0 0 var(--handle-thickness);
+  background: var(--color-border);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+[data-panel-group-direction="horizontal"] > [data-panel-resize-handle-enabled],
+[data-panel-group-direction="horizontal"] > [data-panel-resize-handle-id] {
+  cursor: col-resize;
+  width: var(--handle-thickness);
+}
+
+[data-panel-group-direction="vertical"] > [data-panel-resize-handle-enabled],
+[data-panel-group-direction="vertical"] > [data-panel-resize-handle-id] {
+  cursor: row-resize;
+  height: var(--handle-thickness);
+}
+
+/* light up rust when hovered or being dragged */
+[data-panel-resize-handle-enabled]:hover,
+[data-panel-resize-handle-enabled][data-resize-handle-state="hover"],
+[data-panel-resize-handle-enabled][data-resize-handle-state="drag"] {
+  background: var(--rust-500);
+  box-shadow: 0 0 12px var(--rust-500);
+}
+
+/* a subtle dotted indicator at center, visible on hover only */
+[data-panel-resize-handle-enabled]::after {
+  content: "";
+  position: absolute;
+  background: var(--bone-400);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+[data-panel-group-direction="horizontal"] > [data-panel-resize-handle-enabled]::after {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 1px;
+  height: 22px;
+}
+
+[data-panel-group-direction="vertical"] > [data-panel-resize-handle-enabled]::after {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  height: 1px;
+  width: 22px;
+}
+
+[data-panel-resize-handle-enabled]:hover::after,
+[data-panel-resize-handle-enabled][data-resize-handle-state="hover"]::after,
+[data-panel-resize-handle-enabled][data-resize-handle-state="drag"]::after {
+  opacity: 1;
+  background: var(--bone-100);
+}
+
+[data-panel-resize-handle-enabled]:focus-visible {
+  outline: 2px solid var(--rust-500);
+  outline-offset: -2px;
 }

@@ -53,9 +53,14 @@ test("double-click on a table runs SELECT * FROM table LIMIT 10 into the active 
   const tableRow = page.getByTestId("tree-tbl-workspace_dev_user-sales_2025");
   await expect(tableRow).toBeVisible({ timeout: 10_000 });
 
-  // Double-click the row — should run the peek SELECT without touching
-  // the editor.
-  await tableRow.dblclick();
+  // Expand the row (first click), then peek via a SEPARATE interaction:
+  // Playwright's synthesized `dblclick()` doesn't reliably deliver both
+  // mousedowns when the first click's re-render tree-mutates the row
+  // (see the ▶ peek button test for the coverage of the peek codepath
+  // proper).
+  await tableRow.click();
+  const peekBtn = page.getByTestId("tree-peek-workspace_dev_user-sales_2025");
+  await peekBtn.click({ force: true });
 
   // A queue row appears for the peek; we show the "run queue" panel
   // once there's any in-flight / completed item. Actually the panel

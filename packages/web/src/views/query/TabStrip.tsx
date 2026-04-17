@@ -99,6 +99,9 @@ function TabItem({ tab, active, onActivate, onClose, onRename }: ItemProps) {
           onDoubleClick={() => setEditing(true)}
           data-testid={`tab-pick-${tab.id}`}
         >
+          <span className="tabstrip-kind mono" aria-hidden>
+            {tab.kind === "browser" ? "▣" : tab.source ? "≡" : ">_"}
+          </span>
           {isDirty(tab) && (
             <span className="tabstrip-dirty" data-testid={`tab-dirty-${tab.id}`} aria-label="unsaved">
               ●

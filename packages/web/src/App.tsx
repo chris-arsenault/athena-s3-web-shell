@@ -7,6 +7,7 @@ import { AppShell } from "./components/AppShell";
 import { AuthSplash } from "./components/AuthSplash";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { SchemaProvider } from "./data/schemaContext";
+import { TabsProvider } from "./views/query/tabsContext";
 
 export function App() {
   return (
@@ -14,9 +15,11 @@ export function App() {
       <ErrorBoundary>
         <AuthGate>
           <SchemaProvider>
-            <AppShell>
-              <Outlet />
-            </AppShell>
+            <TabsProvider>
+              <AppShell>
+                <Outlet />
+              </AppShell>
+            </TabsProvider>
           </SchemaProvider>
         </AuthGate>
       </ErrorBoundary>

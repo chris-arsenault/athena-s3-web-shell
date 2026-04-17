@@ -85,6 +85,18 @@
   margin-right: 4px;
 }
 
+.tabstrip-kind {
+  font-size: 10px;
+  color: var(--color-text-dim);
+  letter-spacing: 0;
+  margin-right: 6px;
+  line-height: 1;
+}
+
+.tabstrip-item.is-active .tabstrip-kind {
+  color: var(--rust-400);
+}
+
 .tabstrip-rename {
   background: var(--ink-900);
   border: 1px solid var(--color-border-strong);
