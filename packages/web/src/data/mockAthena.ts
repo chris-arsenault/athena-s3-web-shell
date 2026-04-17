@@ -121,6 +121,49 @@ interface MockExecution {
 
 const executions = new Map<string, MockExecution>();
 
+export async function mockSaveResult(
+  executionId: string,
+  opts: { targetKey: string; includeSqlSidecar: boolean; overwrite: boolean }
+): Promise<{ key: string; sidecarKey?: string }> {
+  const e = executions.get(executionId);
+  if (!e) throw new Error(`No execution ${executionId}`);
+  if (e.status.state !== "SUCCEEDED") {
+    throw new Error(`execution ${executionId} not in SUCCEEDED state`);
+  }
+  const { mockS3 } = await import("./mockS3Store.js");
+  if (!opts.overwrite && mockS3.exists(opts.targetKey)) {
+    const err = new Error(`target already exists: ${opts.targetKey}`);
+    (err as Error & { code: string }).code = "already_exists";
+    throw err;
+  }
+  const csv = resultsToCsvBytes(e.results);
+  const buf = csv.buffer.slice(csv.byteOffset, csv.byteOffset + csv.byteLength) as ArrayBuffer;
+  await mockS3.put(opts.targetKey, buf, csv.byteLength);
+  let sidecarKey: string | undefined;
+  if (opts.includeSqlSidecar) {
+    sidecarKey = swapExtension(opts.targetKey, ".sql");
+    await mockS3.put(sidecarKey, e.status.sql, e.status.sql.length);
+  }
+  return { key: opts.targetKey, sidecarKey };
+}
+
+function resultsToCsvBytes(page: QueryResultPage): Uint8Array {
+  const lines: string[] = [page.columns.map((c) => csvCell(c.name)).join(",")];
+  for (const row of page.rows) lines.push(row.map(csvCell).join(","));
+  return new TextEncoder().encode(lines.join("\n") + "\n");
+}
+
+function csvCell(value: string): string {
+  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
+  return value;
+}
+
+function swapExtension(key: string, newExt: string): string {
+  const idx = key.lastIndexOf(".");
+  if (idx === -1) return key + newExt;
+  return key.slice(0, idx) + newExt;
+}
+
 // 300 rows of demo data so virtualization + pagination have something to bite
 // on in mock mode.
 const LARGE_RESULT_ROW_COUNT = 300;

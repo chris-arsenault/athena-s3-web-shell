@@ -116,6 +116,24 @@ class MockS3Store {
     return new Blob([obj.body]);
   }
 
+  exists(key: string): boolean {
+    return this.store.some((o) => o.key === key);
+  }
+
+  copy(sourceKey: string, targetKey: string): void {
+    const src = this.store.find((o) => o.key === sourceKey);
+    if (!src) throw new Error(`Copy source not found: ${sourceKey}`);
+    const existing = this.store.findIndex((o) => o.key === targetKey);
+    const rec: StoredObject = {
+      key: targetKey,
+      size: src.size,
+      lastModified: new Date().toISOString(),
+      body: src.body,
+    };
+    if (existing >= 0) this.store[existing] = rec;
+    else this.store.push(rec);
+  }
+
   mkdir(key: string): void {
     if (!key.endsWith("/")) key += "/";
     if (this.store.some((o) => o.key === key)) return;

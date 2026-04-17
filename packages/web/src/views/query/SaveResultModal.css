@@ -1,0 +1,127 @@
+.sr-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(9, 9, 12, 0.68);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: var(--s-5);
+  animation: reveal-in var(--dur-fast) var(--ease-out);
+}
+
+.sr-modal {
+  width: 540px;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-5);
+  background:
+    linear-gradient(180deg, var(--ink-800), var(--ink-850));
+  border: 1px solid var(--color-border-strong);
+  box-shadow: 0 40px 80px -30px rgba(0, 0, 0, 0.6);
+}
+
+.sr-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.sr-head-rule {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--rust-500), transparent);
+  opacity: 0.5;
+}
+
+.sr-close {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  padding: 0 var(--s-2);
+}
+
+.sr-close:hover:not(:disabled) {
+  color: var(--crimson-500);
+}
+
+.sr-source {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: var(--s-3);
+  font-size: 11px;
+}
+
+.sr-source-val {
+  color: var(--bone-200);
+  letter-spacing: 0.02em;
+}
+
+.sr-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sr-field .tracked {
+  color: var(--color-text-dim);
+  font-size: 10px;
+}
+
+.sr-input {
+  width: 100%;
+  font-family: var(--font-mono);
+}
+
+.sr-sidecar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: 11px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.sr-sidecar input {
+  accent-color: var(--rust-500);
+}
+
+.sr-error, .sr-overwrite {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-1);
+  flex-wrap: wrap;
+}
+
+.sr-error {
+  background: rgba(217, 85, 85, 0.08);
+  border: 1px solid rgba(217, 85, 85, 0.3);
+}
+
+.sr-overwrite {
+  background: rgba(227, 165, 90, 0.08);
+  border: 1px solid rgba(227, 165, 90, 0.35);
+}
+
+.sr-error-msg {
+  color: var(--bone-200);
+  font-size: 11.5px;
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sr-foot {
+  border-top: 1px dashed var(--color-border);
+  padding-top: var(--s-3);
+}

@@ -10,6 +10,7 @@ import { EmptyState } from "../../components/EmptyState";
 import { VirtualTable } from "../../components/VirtualTable";
 import { downloadBlob, resultsToCsv } from "../../utils/csvDownload";
 import { formatBytes } from "../../utils/formatBytes";
+import { SaveResultModal } from "./SaveResultModal";
 import "./ResultsTable.css";
 
 interface Props {
@@ -67,26 +68,25 @@ function ResultsMeta({
   results: QueryResultPage;
   status: QueryStatus | null;
 }) {
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [savedToast, setSavedToast] = useState<string | null>(null);
+  const canSave = status?.state === "SUCCEEDED" && !!status.executionId;
   return (
     <div className="results-meta flex-row gap-4">
-      <Stat label="ROWS" value={results.rows.length} />
-      {status?.stats?.dataScannedBytes !== undefined && (
-        <Stat
-          label="SCANNED"
-          value={status.stats.dataScannedBytes}
-          format={formatBytes}
-        />
-      )}
-      {status?.stats?.totalExecutionMs !== undefined && (
-        <Stat
-          label="ELAPSED"
-          value={Math.round(status.stats.totalExecutionMs)}
-          suffix=" ms"
-        />
-      )}
+      <MetaStats results={results} status={status} />
       <span className="results-id mono text-dim truncate ml-auto">
         {status?.executionId ? `exec · ${status.executionId.slice(0, 10)}` : ""}
       </span>
+      <button
+        className="btn"
+        onClick={() => setSaveOpen(true)}
+        disabled={!canSave}
+        data-testid="results-save-workspace"
+        title="Save result into workspace"
+      >
+        <span aria-hidden>◆</span>
+        <span>save</span>
+      </button>
       <button
         className="btn"
         onClick={() =>
@@ -96,7 +96,44 @@ function ResultsMeta({
         <span aria-hidden>↓</span>
         <span>CSV</span>
       </button>
+      {saveOpen && canSave && status && (
+        <SaveResultModal
+          executionId={status.executionId}
+          status={status}
+          onClose={() => setSaveOpen(false)}
+          onSaved={(key) => {
+            setSaveOpen(false);
+            setSavedToast(key);
+            setTimeout(() => setSavedToast(null), 4_000);
+          }}
+        />
+      )}
+      {savedToast && (
+        <div className="results-toast mono" data-testid="results-save-toast">
+          saved to <span className="text-dim">{savedToast}</span>
+        </div>
+      )}
     </div>
+  );
+}
+
+function MetaStats({
+  results,
+  status,
+}: {
+  results: QueryResultPage;
+  status: QueryStatus | null;
+}) {
+  return (
+    <>
+      <Stat label="ROWS" value={results.rows.length} />
+      {status?.stats?.dataScannedBytes !== undefined && (
+        <Stat label="SCANNED" value={status.stats.dataScannedBytes} format={formatBytes} />
+      )}
+      {status?.stats?.totalExecutionMs !== undefined && (
+        <Stat label="ELAPSED" value={Math.round(status.stats.totalExecutionMs)} suffix=" ms" />
+      )}
+    </>
   );
 }
 

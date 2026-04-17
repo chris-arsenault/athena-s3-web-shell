@@ -204,12 +204,30 @@ function datasetsCreateTable(
   });
 }
 
+function querySaveToWorkspace(
+  req: Request,
+  attrs: {
+    executionId: string;
+    targetKey: string;
+    includeSqlSidecar: boolean;
+  }
+): void {
+  logger.info({
+    ...envelope(req, "query.save_to_workspace"),
+    executionId: attrs.executionId,
+    targetKey: attrs.targetKey,
+    includeSqlSidecar: attrs.includeSqlSidecar,
+    outcome: "ok",
+  });
+}
+
 export const audit = {
   queryStart,
   queryEnd,
   queryStop,
   queryResults,
   queryDownload,
+  querySaveToWorkspace,
   datasetsInfer,
   datasetsCreateTable,
 };
