@@ -69,6 +69,36 @@ resource "aws_iam_role_policy" "proxy_task" {
           "arn:aws:glue:${var.region}:${local.account_id}:catalog",
           "arn:aws:glue:${var.region}:${local.account_id}:database/${aws_glue_catalog_database.main.name}",
           "arn:aws:glue:${var.region}:${local.account_id}:table/${aws_glue_catalog_database.main.name}/*",
+          "arn:aws:glue:${var.region}:${local.account_id}:database/workspace_*",
+          "arn:aws:glue:${var.region}:${local.account_id}:table/workspace_*/*",
+        ]
+      },
+      # Datasets flow (issue #5): POST /api/datasets/create-table issues
+      # CREATE DATABASE IF NOT EXISTS workspace_<username>, then CREATE
+      # EXTERNAL TABLE. Athena executes those via the Glue Data Catalog,
+      # so the proxy task role needs matching Glue write permissions.
+      # Scoped to workspace_* (per-user DBs) and the demo glue DB — the
+      # proxy's route-layer validation (datasets.ts validateCreateTable)
+      # enforces `body.database === req.user.athena.userDatabase`, so
+      # a user can only ever ask for their own workspace_<username>.
+      #
+      # FUTURE (SSO): widen to `database/team_*` when per-team catalogs
+      # replace per-user ones.
+      {
+        Sid    = "GlueWriteUserWorkspaces"
+        Effect = "Allow"
+        Action = [
+          "glue:CreateDatabase",
+          "glue:CreateTable",
+          "glue:UpdateTable",
+          "glue:DeleteTable",
+          "glue:BatchCreatePartition",
+          "glue:BatchDeletePartition",
+        ]
+        Resource = [
+          "arn:aws:glue:${var.region}:${local.account_id}:catalog",
+          "arn:aws:glue:${var.region}:${local.account_id}:database/workspace_*",
+          "arn:aws:glue:${var.region}:${local.account_id}:table/workspace_*/*",
         ]
       },
       # Athena reads source data using the caller's identity — the proxy
