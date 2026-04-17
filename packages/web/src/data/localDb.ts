@@ -12,6 +12,12 @@ export interface Favorite {
   savedAt: string;
 }
 
+export interface TabScratchpadSource {
+  kind: "scratchpad";
+  key: string;
+  etag?: string;
+}
+
 export interface TabRecord {
   id: string;
   name: string;
@@ -20,6 +26,8 @@ export interface TabRecord {
   lastExecutionId?: string;
   order: number;
   updatedAt: string;
+  source?: TabScratchpadSource;
+  savedSql?: string;
 }
 
 export interface SessionEntry {

@@ -116,6 +116,15 @@ class MockS3Store {
     return new Blob([obj.body]);
   }
 
+  async getText(key: string): Promise<string> {
+    const obj = this.store.find((o) => o.key === key);
+    if (!obj) throw new Error(`Not found: ${key}`);
+    if (typeof obj.body === "string") return obj.body;
+    if (obj.body instanceof ArrayBuffer) return new TextDecoder().decode(obj.body);
+    if (obj.body instanceof Blob) return await obj.body.text();
+    return "";
+  }
+
   exists(key: string): boolean {
     return this.store.some((o) => o.key === key);
   }

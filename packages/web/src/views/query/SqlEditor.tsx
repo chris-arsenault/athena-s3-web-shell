@@ -10,6 +10,7 @@ interface Props {
   onRunAtCursor?: (offset: number) => void;
   onRunAll?: () => void;
   onRunSelection?: (text: string) => void;
+  onSave?: () => void;
 }
 
 export function SqlEditor(props: Props) {

@@ -28,6 +28,7 @@ export interface UseTabs {
   closeTab: (id: string) => void;
   renameTab: (id: string, name: string) => void;
   patchTab: (id: string, patch: Partial<Tab>) => void;
+  openScratchpad: (key: string, name: string, content: string, etag?: string) => Tab;
 }
 
 export function useTabs(): UseTabs {
@@ -81,6 +82,20 @@ export function useTabs(): UseTabs {
     [patchTab]
   );
 
+  const openScratchpad = useCallback(
+    (key: string, name: string, content: string, etag?: string): Tab => {
+      let created = newTabRecord(0);
+      setTabs((prev) => {
+        const { next, tab } = openOrReuseScratchpadTab(prev, key, name, content, etag);
+        created = tab;
+        return next;
+      });
+      setActive(created.id);
+      return created;
+    },
+    [setActive]
+  );
+
   const activeTab = tabs.find((t) => t.id === activeId) ?? null;
   return {
     tabs,
@@ -92,7 +107,28 @@ export function useTabs(): UseTabs {
     closeTab,
     renameTab,
     patchTab,
+    openScratchpad,
   };
+}
+
+function openOrReuseScratchpadTab(
+  prev: Tab[],
+  key: string,
+  name: string,
+  content: string,
+  etag?: string
+): { next: Tab[]; tab: Tab } {
+  const existing = prev.find((t) => t.source?.key === key);
+  if (existing) return { next: prev, tab: existing };
+  const tab: Tab = {
+    ...newTabRecord(prev.length),
+    name,
+    sql: content,
+    savedSql: content,
+    source: { kind: "scratchpad", key, etag },
+  };
+  void tabsStore.upsert(tab);
+  return { next: [...prev, tab], tab };
 }
 
 async function hydrate(

@@ -47,6 +47,11 @@ interface ItemProps {
   onRename: (name: string) => void;
 }
 
+function isDirty(tab: Tab): boolean {
+  if (!tab.source) return false;
+  return tab.sql !== (tab.savedSql ?? "");
+}
+
 function TabItem({ tab, active, onActivate, onClose, onRename }: ItemProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(tab.name);
@@ -94,6 +99,11 @@ function TabItem({ tab, active, onActivate, onClose, onRename }: ItemProps) {
           onDoubleClick={() => setEditing(true)}
           data-testid={`tab-pick-${tab.id}`}
         >
+          {isDirty(tab) && (
+            <span className="tabstrip-dirty" data-testid={`tab-dirty-${tab.id}`} aria-label="unsaved">
+              ●
+            </span>
+          )}
           <span className="tabstrip-name mono truncate">{tab.name}</span>
         </button>
       )}

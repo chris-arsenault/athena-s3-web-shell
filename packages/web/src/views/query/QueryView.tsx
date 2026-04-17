@@ -4,10 +4,12 @@ import type { HistoryEntry, SavedQuery } from "@athena-shell/shared";
 
 import { useAuth } from "../../auth/authContext";
 import { LoadingSpinner } from "../../components/LoadingSpinner";
+import { readScratchpad } from "../../data/scratchpadRepo";
 import { SchemaProvider } from "../../data/schemaContext";
 import { HistoryPanel } from "./HistoryPanel";
 import { SavedQueriesPanel } from "./SavedQueriesPanel";
 import { SchemaTree } from "./SchemaTree";
+import { ScratchpadPanel } from "./ScratchpadPanel";
 import { TabPane } from "./TabPane";
 import { TabStrip } from "./TabStrip";
 import { useTabs, type Tab } from "./useTabs";
@@ -22,13 +24,14 @@ export function QueryView() {
 }
 
 function QueryViewInner() {
-  const { context, loading } = useAuth();
+  const { provider, context, loading } = useAuth();
   const tabsApi = useTabs();
   const [savedSignal, setSavedSignal] =
     useState<{ queryId: string; sql: string } | null>(null);
   const [historySignal, setHistorySignal] =
     useState<{ executionId: string; sql: string } | null>(null);
   const [savedKey, setSavedKey] = useState(0);
+  const [scratchpadKey, setScratchpadKey] = useState(0);
 
   if (loading || !context || !tabsApi.ready) {
     return <LoadingSpinner label="query workspace" />;
@@ -40,6 +43,10 @@ function QueryViewInner() {
   const onSelectHistory = (e: HistoryEntry) => {
     setHistorySignal({ executionId: e.executionId + "-" + Date.now(), sql: e.sql });
   };
+  const onOpenScratchpad = async (key: string, name: string) => {
+    const { content, etag } = await readScratchpad(provider, context, key);
+    tabsApi.openScratchpad(key, name, content, etag);
+  };
 
   return (
     <div className="query-view flex-row flex-1">
@@ -49,6 +56,11 @@ function QueryViewInner() {
           refreshKey={savedKey}
           onPick={onPickSaved}
           onChanged={() => setSavedKey((k) => k + 1)}
+        />
+        <ScratchpadPanel
+          refreshKey={scratchpadKey}
+          onOpen={onOpenScratchpad}
+          onChanged={() => setScratchpadKey((k) => k + 1)}
         />
       </aside>
       <section className="query-main-wrap flex-col flex-1">
@@ -70,6 +82,7 @@ function QueryViewInner() {
               onPickSavedSignal={tab.id === tabsApi.activeId ? savedSignal : null}
               onHistorySignal={tab.id === tabsApi.activeId ? historySignal : null}
               onSavedQueryCreated={() => setSavedKey((k) => k + 1)}
+              onScratchpadSaved={() => setScratchpadKey((k) => k + 1)}
             />
           ))}
         </div>

@@ -11,12 +11,14 @@ interface Props {
   onRunAtCursor?: (offset: number) => void;
   onRunAll?: () => void;
   onRunSelection?: (text: string) => void;
+  onSave?: () => void;
 }
 
 interface HandlerRefs {
   runAtCursor: React.RefObject<((offset: number) => void) | undefined>;
   runAll: React.RefObject<(() => void) | undefined>;
   runSelection: React.RefObject<((text: string) => void) | undefined>;
+  save: React.RefObject<(() => void) | undefined>;
 }
 
 const THEME_NAME = "athena-shell-dark";
@@ -88,9 +90,11 @@ export default function SqlEditorImpl(props: Props) {
   const runAtCursorRef = useRef(props.onRunAtCursor);
   const runAllRef = useRef(props.onRunAll);
   const runSelectionRef = useRef(props.onRunSelection);
+  const saveRef = useRef(props.onSave);
   runAtCursorRef.current = props.onRunAtCursor;
   runAllRef.current = props.onRunAll;
   runSelectionRef.current = props.onRunSelection;
+  saveRef.current = props.onSave;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -136,6 +140,7 @@ export default function SqlEditorImpl(props: Props) {
       runAtCursor: runAtCursorRef,
       runAll: runAllRef,
       runSelection: runSelectionRef,
+      save: saveRef,
     });
     return () => {
       sub.dispose();
@@ -173,5 +178,8 @@ function registerRunCommands(
     const model = editor.getModel();
     if (!sel || !model || sel.isEmpty()) return;
     refs.runSelection.current?.(model.getValueInRange(sel));
+  });
+  editor.addCommand(mod.CtrlCmd | key.KeyS, () => {
+    refs.save.current?.();
   });
 }

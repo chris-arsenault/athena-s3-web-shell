@@ -1,0 +1,140 @@
+.sp {
+  padding: var(--s-3) var(--s-2);
+  border-top: 1px solid var(--color-border);
+}
+
+.sp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--s-2) var(--s-2);
+}
+
+.sp-count {
+  font-size: 10px;
+  color: var(--phosphor-500);
+  letter-spacing: 0.1em;
+}
+
+.sp-rule {
+  height: 1px;
+  background: linear-gradient(90deg, var(--phosphor-500), transparent);
+  margin: 0 var(--s-2) var(--s-2);
+  opacity: 0.45;
+}
+
+.sp-new {
+  display: flex;
+  gap: 4px;
+  padding: 0 var(--s-2) var(--s-2);
+}
+
+.sp-new-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  padding: 4px 6px;
+}
+
+.sp-new-btn {
+  padding: 4px 8px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.sp-status, .sp-empty, .sp-err {
+  padding: var(--s-2);
+  font-size: 10.5px;
+}
+
+.sp-err {
+  color: var(--crimson-500);
+  overflow-wrap: anywhere;
+}
+
+.sp-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sp-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px var(--s-2);
+  border-radius: var(--r-1);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.sp-row:hover {
+  background: var(--ink-700);
+}
+
+.sp-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  padding: 2px 4px;
+  color: var(--color-text);
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.sp-open:hover {
+  color: var(--color-text-strong);
+}
+
+.sp-glyph {
+  color: var(--phosphor-500);
+  font-size: 10px;
+  opacity: 0.7;
+  width: 10px;
+}
+
+.sp-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.sp-act {
+  background: transparent;
+  border: none;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  padding: 2px 6px;
+  font-size: 12px;
+  line-height: 1;
+  border-radius: var(--r-1);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.sp-row:hover .sp-act {
+  opacity: 0.9;
+}
+
+.sp-act:hover {
+  color: var(--bone-100);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.sp-act-del:hover {
+  color: var(--crimson-500);
+}
+
+.sp-rename {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
