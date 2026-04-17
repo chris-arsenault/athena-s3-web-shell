@@ -1,3 +1,4 @@
+import { goToQuery, goToWorkspace } from "./helpers";
 import { expect, test } from "@playwright/test";
 
 async function freshPage(page: import("@playwright/test").Page, path: string) {
@@ -34,7 +35,7 @@ test("user's workspace_<username> DB is auto-expanded in the catalog on mount", 
   page,
 }) => {
   await registerTableFromSalesCsv(page);
-  await page.getByTestId("nav-link-query").click();
+  await goToQuery(page);
 
   // The tree-tbl-* testid only appears when the parent db is expanded.
   // If auto-expand works, the newly-created sales_2025 table should be
@@ -48,7 +49,7 @@ test("double-click on a table runs SELECT * FROM table LIMIT 10 into the active 
   page,
 }) => {
   await registerTableFromSalesCsv(page);
-  await page.getByTestId("nav-link-query").click();
+  await goToQuery(page);
 
   const tableRow = page.getByTestId("tree-tbl-workspace_dev_user-sales_2025");
   await expect(tableRow).toBeVisible({ timeout: 10_000 });
@@ -78,7 +79,7 @@ test("a small ▶ peek button on each table row runs the same SELECT * LIMIT 10"
   page,
 }) => {
   await registerTableFromSalesCsv(page);
-  await page.getByTestId("nav-link-query").click();
+  await goToQuery(page);
 
   // Button-click fires the same peek — tests the explicit affordance
   // (for users who don't discover the double-click).
@@ -128,7 +129,7 @@ test("modal auto-overrides risky columns to STRING on open (stricter-parse heuri
   await expect(modal).toBeHidden({ timeout: 15_000 });
 
   // Navigate to /query; both the view and raw table should exist.
-  await page.getByTestId("nav-link-query").click();
+  await goToQuery(page);
   await expect(
     page.getByTestId("tree-tbl-workspace_dev_user-dirty_orders")
   ).toBeVisible({ timeout: 10_000 });
@@ -145,7 +146,7 @@ test("duplicate-table: re-registering at the same dataset path hard-blocks and o
   // Now sales-2025.csv lives at /datasets/sales_2025/.
   // Navigate there and click ⊞ on the file — same table name, same
   // location, should block.
-  await page.getByTestId("nav-link-workspace").click();
+  await goToWorkspace(page);
   await page.locator(".crumb-root").click();
   await page
     .locator(".fb-folder")
@@ -178,7 +179,7 @@ test("duplicate-table: re-registering at the same dataset path hard-blocks and o
   await expect(modal).toBeHidden({ timeout: 15_000 });
 
   // The table still exists under the same name — DROP + CREATE landed.
-  await page.getByTestId("nav-link-query").click();
+  await goToQuery(page);
   await expect(
     page.getByTestId("tree-tbl-workspace_dev_user-sales_2025")
   ).toBeVisible({ timeout: 10_000 });
@@ -191,7 +192,7 @@ test("CreateTable moves the source file into a per-table subdir under <prefix>/d
 
   // Navigate from the workspace root; don't page.goto (would reset
   // the mock S3 state that carries the move result).
-  await page.getByTestId("nav-link-workspace").click();
+  await goToWorkspace(page);
   await page.locator(".crumb-root").click();
 
   // sample-data/ is still a folder (customers.csv remains); enter it.

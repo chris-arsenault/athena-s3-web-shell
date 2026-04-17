@@ -4,10 +4,10 @@ test("boots on / and redirects into the workspace with the console chrome", asyn
   await page.goto("/");
   await expect(page).toHaveURL(/\/workspace$/);
 
-  // AppShell chrome: brand wordmark, module nav, status bar.
+  // AppShell chrome: brand wordmark, sidebar workspace entry, status bar.
   await expect(page.locator(".brand-word")).toBeVisible();
   await expect(page.getByTestId("nav-link-workspace")).toBeVisible();
-  await expect(page.getByTestId("nav-link-query")).toBeVisible();
+  await expect(page.locator(".tabstrip")).toBeVisible();
   await expect(page.locator(".statusbar")).toBeVisible();
 
   // Status bar mentions the mock identity bucket.

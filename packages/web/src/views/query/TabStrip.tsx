@@ -32,6 +32,7 @@ export function TabStrip({ tabs, activeId, onActivate, onClose, onNew, onRename 
         aria-label="New tab"
         onClick={onNew}
         data-testid="tab-new"
+        title="New SQL tab"
       >
         +
       </button>
@@ -75,6 +76,7 @@ function TabItem({ tab, active, onActivate, onClose, onRename }: ItemProps) {
     <li
       className={`tabstrip-item reg ${active ? "is-active" : ""}`}
       data-testid={`tab-${tab.id}`}
+      data-tab-kind={tab.kind ?? "sql"}
     >
       {editing ? (
         <input

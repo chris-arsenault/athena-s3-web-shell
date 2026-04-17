@@ -13,12 +13,12 @@ interface Props {
 }
 
 /**
- * Lightweight folder-tree inside the side panel. Shows the workspace
- * root + immediate children; folders expand in place to reveal their
- * children. Click a folder → opens a browser tab in the main area.
+ * Lightweight folder-tree inside the side panel.
  *
- * Intentionally NOT a full recursive tree — the file browser itself
- * handles deep navigation. The sidebar is a shortcut surface.
+ * Single-click on a row toggles expand/collapse only — this used to
+ * ALSO open a browser tab, which meant "clicking around the tree"
+ * immediately spawned a pile of tabs. The dedicated open button (⬈)
+ * or a double-click is how you actually open a tab for a folder.
  */
 export function WorkspaceSection({ onOpen, activePrefix }: Props) {
   const { provider, context } = useAuth();
@@ -69,7 +69,7 @@ function WorkspaceTree({ provider, context, onOpen, activePrefix }: TreeProps) {
     void load(root);
   }, [load, root]);
 
-  const toggleOrOpen = (prefix: string) => {
+  const onToggle = (prefix: string) => {
     const wasExpanded = expanded.has(prefix);
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -78,7 +78,6 @@ function WorkspaceTree({ provider, context, onOpen, activePrefix }: TreeProps) {
       return next;
     });
     if (!wasExpanded) void load(prefix);
-    onOpen(prefix);
   };
 
   return (
@@ -91,7 +90,8 @@ function WorkspaceTree({ provider, context, onOpen, activePrefix }: TreeProps) {
         expanded={expanded.has(root)}
         active={activePrefix === root}
         loading={loading.has(root)}
-        onToggle={() => toggleOrOpen(root)}
+        onToggle={() => onToggle(root)}
+        onOpen={() => onOpen(root)}
       />
       {expanded.has(root) && (folders[root] ?? []).map((p) => (
         <TreeBranch
@@ -102,7 +102,8 @@ function WorkspaceTree({ provider, context, onOpen, activePrefix }: TreeProps) {
           folders={folders}
           loading={loading}
           activePrefix={activePrefix}
-          onToggle={toggleOrOpen}
+          onToggle={onToggle}
+          onOpen={onOpen}
         />
       ))}
     </ul>
@@ -117,6 +118,7 @@ interface BranchProps {
   loading: Set<string>;
   activePrefix: string | null;
   onToggle: (prefix: string) => void;
+  onOpen: (prefix: string) => void;
 }
 
 function TreeBranch(p: BranchProps) {
@@ -133,6 +135,7 @@ function TreeBranch(p: BranchProps) {
         active={p.activePrefix === p.prefix}
         loading={p.loading.has(p.prefix)}
         onToggle={() => p.onToggle(p.prefix)}
+        onOpen={() => p.onOpen(p.prefix)}
       />
       {isOpen && children && children.map((child) => (
         <TreeBranch
@@ -155,6 +158,7 @@ interface RowProps {
   active: boolean;
   loading: boolean;
   onToggle: () => void;
+  onOpen: () => void;
 }
 
 function TreeRow(p: RowProps) {
@@ -172,6 +176,10 @@ function TreeRow(p: RowProps) {
   ]
     .filter(Boolean)
     .join(" ");
+  // The root's open button keeps the legacy nav-link-workspace testid so
+  // e2e and muscle-memory selectors that used to find the sidebar rail
+  // still work without churn.
+  const openTestId = p.isRoot ? "nav-link-workspace" : `ws-open-${p.prefix}`;
   return (
     <li
       className={classes}
@@ -187,7 +195,9 @@ function TreeRow(p: RowProps) {
         type="button"
         className="ws-row-btn"
         onClick={p.onToggle}
+        onDoubleClick={p.onOpen}
         data-testid={`ws-row-${p.prefix}`}
+        title="Click to expand · double-click or ⬈ to open as a tab"
       >
         <span className="ws-row-chev mono" aria-hidden>
           {p.loading ? "…" : p.expanded ? "▾" : "▸"}
@@ -196,6 +206,19 @@ function TreeRow(p: RowProps) {
           {p.isRoot ? "▣" : "▸"}
         </span>
         <span className="ws-row-name mono truncate">{p.label}</span>
+      </button>
+      <button
+        type="button"
+        className="ws-row-open"
+        onClick={(e) => {
+          e.stopPropagation();
+          p.onOpen();
+        }}
+        data-testid={openTestId}
+        title={`Open ${p.label} as a browser tab`}
+        aria-label={`Open ${p.label} as a browser tab`}
+      >
+        ⬈
       </button>
     </li>
   );

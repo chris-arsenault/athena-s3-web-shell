@@ -1,3 +1,4 @@
+import { goToQuery, goToWorkspace } from "./helpers";
 import { expect, test } from "@playwright/test";
 
 async function freshPage(page: import("@playwright/test").Page, path: string) {
@@ -35,7 +36,7 @@ test("schema → workspace: table with LOCATION inside user prefix shows ⇡ lin
 }) => {
   await registerTableFromSalesCsv(page);
 
-  await page.getByTestId("nav-link-query").click();
+  await goToQuery(page);
   await expect(page).toHaveURL(/\/query/);
 
   // workspace_dev_user now auto-expands on mount — no need to click it
@@ -56,7 +57,7 @@ test("workspace → query: ⌕ opens a NEW tab so an in-flight draft isn't clobb
   await registerTableFromSalesCsv(page);
 
   // Hop to /query and seed the active tab with an in-flight marker.
-  await page.getByTestId("nav-link-query").click();
+  await goToQuery(page);
   const activeEditor = () =>
     page.locator(".query-main:not(.is-hidden) .sql-editor").first();
   const activeLines = () =>
@@ -75,7 +76,7 @@ test("workspace → query: ⌕ opens a NEW tab so an in-flight draft isn't clobb
   // where the copied CSV lives). Reset to prefix root via the
   // breadcrumb, then drill into the table's isolated subdir and
   // click ⌕ on the CSV row.
-  await page.getByTestId("nav-link-workspace").click();
+  await goToWorkspace(page);
   await page.locator(".crumb-root").click();
   await page
     .locator(".fb-folder")

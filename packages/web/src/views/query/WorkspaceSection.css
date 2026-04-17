@@ -8,6 +8,44 @@
 
 .ws-row {
   display: flex;
+  align-items: center;
+  position: relative;
+}
+
+/* Hover-only open button — matches the SchemaTree ▶ peek button. */
+.ws-row-open {
+  all: unset;
+  flex-shrink: 0;
+  width: 22px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  padding: 3px 0;
+  opacity: 0;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.ws-row:hover .ws-row-open,
+.ws-row.is-active .ws-row-open {
+  opacity: 0.8;
+}
+
+/* Root row's open button is the primary entry point — always visible. */
+.ws-row.is-root .ws-row-open {
+  opacity: 0.7;
+}
+
+.ws-row.is-root:hover .ws-row-open {
+  opacity: 1;
+}
+
+.ws-row-open:hover,
+.ws-row-open:focus-visible {
+  color: var(--rust-400);
+  opacity: 1;
 }
 
 .ws-row-btn {
@@ -16,8 +54,9 @@
   align-items: center;
   gap: var(--s-2);
   /* --ws-indent is set per-row by the component to express depth. */
-  padding: 3px var(--s-3) 3px var(--ws-indent, var(--s-2));
-  width: 100%;
+  padding: 3px var(--s-2) 3px var(--ws-indent, var(--s-2));
+  flex: 1 1 auto;
+  min-width: 0;
   cursor: pointer;
   color: var(--color-text-muted);
   transition:

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Panel,
   PanelGroup,
@@ -90,40 +90,31 @@ export function QueryView() {
 function QueryViewInner() {
   const { provider, context, loading } = useAuth();
   const tabsApi = useTabsContext();
+  const navigate = useNavigate();
   const [savedKey, setSavedKey] = useState(0);
   const [scratchpadKey, setScratchpadKey] = useState(0);
-  const [journalCollapsed, setJournalCollapsed] = useState(false);
-  const journalRef = useRef<ImperativePanelHandle>(null);
-  const toggleJournal = useCallback(() => {
-    const panel = journalRef.current;
-    if (!panel) return;
-    if (panel.isCollapsed()) panel.expand();
-    else panel.collapse();
-  }, []);
-  // Per-tab handle map (not a single activeRef) — each SQL tab
-  // registers by id regardless of hidden state, so tab-activation never
-  // races the effect schedule. The callers below resolve by tabsApi.activeId.
-  const handleMapRef = useRef<Map<string, ActiveTabHandle>>(new Map());
-  const handleMap: HandleMap = handleMapRef;
-  // Keep the tabs api + context reachable from stable callbacks so the
-  // on-click closures we hand down to SchemaTree / SavedQueries don't
-  // get re-identified on every QueryView render. Otherwise React
-  // detaches + re-attaches DOM listeners mid-gesture (click → click →
-  // dblclick), and a double-click on a tree-row can land on a listener
-  // that no longer routes to onPeek.
-  const tabsApiRef = useRef(tabsApi);
-  tabsApiRef.current = tabsApi;
-  const providerRef = useRef(provider);
-  providerRef.current = provider;
-  const contextRef = useRef<AuthContext | null>(context ?? null);
-  contextRef.current = context ?? null;
+  const refs = useStableRefs(tabsApi, provider, context);
+  const journal = useJournalPanel();
   useRouteTabSeed(tabsApi.ready, tabsApi, context);
   usePrefillTableParam(tabsApi.ready, tabsApi);
 
   if (loading || !context || !tabsApi.ready) {
     return <LoadingSpinner label="query workspace" />;
   }
-  const handlers = buildHandlers(handleMap, tabsApiRef, providerRef, contextRef);
+  const handlers = buildHandlers(refs.handleMap, refs.tabsApiRef, refs.providerRef, refs.contextRef);
+  const openBrowserTab = (p: string) => {
+    tabsApi.openBrowserTab(p);
+    navigate("/workspace");
+  };
+  const newSqlTab = () => {
+    tabsApi.newTab();
+    navigate("/query");
+  };
+  const activateTab = (id: string) => {
+    tabsApi.setActive(id);
+    const tab = tabsApi.tabs.find((t) => t.id === id);
+    navigate(tab?.kind === "browser" ? "/workspace" : "/query");
+  };
 
   return (
     <PanelGroup
@@ -140,33 +131,95 @@ function QueryViewInner() {
           onPeekTable={handlers.onPeekTable}
           onOpenScratchpad={handlers.onOpenScratchpad}
           onScratchpadChanged={() => setScratchpadKey((k) => k + 1)}
-          onOpenBrowserTab={(p) => tabsApi.openBrowserTab(p)}
+          onOpenBrowserTab={openBrowserTab}
           activeBrowserPrefix={activeBrowserPrefix(tabsApi.activeTab)}
         />
       </Panel>
       <PanelResizeHandle />
       <Panel id="q-main" order={2} minSize={30} className="query-main-panel">
-        <QueryMain tabsApi={tabsApi} handleMap={handleMap}
+        <QueryMain
+          tabsApi={tabsApi}
+          handleMap={refs.handleMap}
           onSavedChanged={() => setSavedKey((k) => k + 1)}
-          onScratchpadChanged={() => setScratchpadKey((k) => k + 1)} />
+          onScratchpadChanged={() => setScratchpadKey((k) => k + 1)}
+          onNewSqlTab={newSqlTab}
+          onActivateTab={activateTab}
+        />
       </Panel>
       <PanelResizeHandle />
       <Panel
-        id="q-journal" order={3} ref={journalRef}
+        id="q-journal" order={3} ref={journal.ref}
         collapsible collapsedSize={3} defaultSize={20} minSize={12} maxSize={40}
-        onCollapse={() => setJournalCollapsed(true)}
-        onExpand={() => setJournalCollapsed(false)}
+        onCollapse={journal.onCollapse}
+        onExpand={journal.onExpand}
         className="query-journal-panel"
       >
         <QueryJournal
-          collapsed={journalCollapsed}
-          onToggle={toggleJournal}
+          collapsed={journal.collapsed}
+          onToggle={journal.toggle}
           onSelect={handlers.onSelectHistory}
           refreshKey={tabsApi.activeTab?.lastExecutionId ?? ""}
         />
       </Panel>
     </PanelGroup>
   );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Internal hooks
+
+interface StableRefs {
+  handleMap: HandleMap;
+  tabsApiRef: React.MutableRefObject<UseTabs>;
+  providerRef: React.MutableRefObject<ReturnType<typeof useAuth>["provider"]>;
+  contextRef: React.MutableRefObject<AuthContext | null>;
+}
+
+/**
+ * Per-tab handle map plus refs that keep a stable view of tabsApi /
+ * provider / context inside closures handed to child components. Avoids
+ * re-identifying on every render — which otherwise detaches + reattaches
+ * DOM listeners mid-gesture.
+ */
+function useStableRefs(
+  tabsApi: UseTabs,
+  provider: ReturnType<typeof useAuth>["provider"],
+  context: AuthContext | null
+): StableRefs {
+  const handleMapRef = useRef<Map<string, ActiveTabHandle>>(new Map());
+  const tabsApiRef = useRef(tabsApi);
+  tabsApiRef.current = tabsApi;
+  const providerRef = useRef(provider);
+  providerRef.current = provider;
+  const contextRef = useRef<AuthContext | null>(context ?? null);
+  contextRef.current = context ?? null;
+  return { handleMap: handleMapRef, tabsApiRef, providerRef, contextRef };
+}
+
+interface JournalPanelState {
+  ref: React.RefObject<ImperativePanelHandle>;
+  collapsed: boolean;
+  onCollapse: () => void;
+  onExpand: () => void;
+  toggle: () => void;
+}
+
+function useJournalPanel(): JournalPanelState {
+  const ref = useRef<ImperativePanelHandle>(null);
+  const [collapsed, setCollapsed] = useState(false);
+  const toggle = useCallback(() => {
+    const p = ref.current;
+    if (!p) return;
+    if (p.isCollapsed()) p.expand();
+    else p.collapse();
+  }, []);
+  return {
+    ref,
+    collapsed,
+    onCollapse: () => setCollapsed(true),
+    onExpand: () => setCollapsed(false),
+    toggle,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -228,29 +281,31 @@ interface QueryMainProps {
   handleMap: HandleMap;
   onSavedChanged: () => void;
   onScratchpadChanged: () => void;
+  onNewSqlTab: () => void;
+  onActivateTab: (id: string) => void;
 }
 
-function QueryMain({ tabsApi, handleMap, onSavedChanged, onScratchpadChanged }: QueryMainProps) {
+function QueryMain(p: QueryMainProps) {
   return (
     <section className="query-main-wrap flex-col flex-1">
       <TabStrip
-        tabs={tabsApi.tabs}
-        activeId={tabsApi.activeId}
-        onActivate={tabsApi.setActive}
-        onClose={tabsApi.closeTab}
-        onNew={() => tabsApi.newTab()}
-        onRename={tabsApi.renameTab}
+        tabs={p.tabsApi.tabs}
+        activeId={p.tabsApi.activeId}
+        onActivate={p.onActivateTab}
+        onClose={p.tabsApi.closeTab}
+        onNew={p.onNewSqlTab}
+        onRename={p.tabsApi.renameTab}
       />
       <div className="query-panes flex-1">
-        {tabsApi.tabs.map((tab) => (
+        {p.tabsApi.tabs.map((tab) => (
           <TabPane
             key={tab.id}
             tab={tab}
-            hidden={tab.id !== tabsApi.activeId}
-            onPatch={(patch: Partial<Tab>) => tabsApi.patchTab(tab.id, patch)}
-            handleMap={handleMap}
-            onSavedQueryCreated={onSavedChanged}
-            onScratchpadSaved={onScratchpadChanged}
+            hidden={tab.id !== p.tabsApi.activeId}
+            onPatch={(patch: Partial<Tab>) => p.tabsApi.patchTab(tab.id, patch)}
+            handleMap={p.handleMap}
+            onSavedQueryCreated={p.onSavedChanged}
+            onScratchpadSaved={p.onScratchpadChanged}
           />
         ))}
       </div>

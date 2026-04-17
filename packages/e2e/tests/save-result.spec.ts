@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { goToWorkspace } from "./helpers";
+
 async function freshPage(page: import("@playwright/test").Page, path: string) {
   await page.goto("/");
   await page.evaluate(
@@ -53,7 +55,7 @@ test("save-to-workspace: modal writes a CSV + SQL sidecar visible in workspace",
   await expect(modal).toBeHidden();
 
   // Navigate to the workspace and verify the file is there.
-  await page.getByTestId("nav-link-workspace").click();
+  await goToWorkspace(page);
   await page
     .locator(".fb-folder")
     .filter({ hasText: /results\// })

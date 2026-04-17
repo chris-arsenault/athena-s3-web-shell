@@ -1,3 +1,4 @@
+import { goToQuery, goToWorkspace } from "./helpers";
 import { expect, test } from "@playwright/test";
 
 test("navigates between workspace and query via the nav links", async ({ page }) => {
@@ -7,13 +8,15 @@ test("navigates between workspace and query via the nav links", async ({ page })
   await expect(page.locator(".fb-banner")).toBeVisible();
 
   // Click Query nav → URL + QueryView surfaces swap in.
-  await page.getByTestId("nav-link-query").click();
+  await goToQuery(page);
   await expect(page).toHaveURL(/\/query$/);
-  await expect(page.locator(".qbtn-run")).toBeVisible();
+  // The active SQL pane's run button is the only visible one (inactive
+  // tabs live in the DOM but under visibility:hidden).
+  await expect(page.locator(".query-main:not(.is-hidden) .qbtn-run").first()).toBeVisible();
   await expect(page.locator(".catalog")).toBeVisible();
 
   // And back to Workspace.
-  await page.getByTestId("nav-link-workspace").click();
+  await goToWorkspace(page);
   await expect(page).toHaveURL(/\/workspace$/);
   await expect(page.locator(".fb-banner")).toBeVisible();
 });

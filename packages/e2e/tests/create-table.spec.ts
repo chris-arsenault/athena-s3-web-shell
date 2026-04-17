@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { goToQuery } from "./helpers";
+
 test("register-table flow: inferred schema → create → appears in /query schema tree", async ({
   page,
 }) => {
@@ -43,7 +45,7 @@ test("register-table flow: inferred schema → create → appears in /query sche
   await expect(modal).toBeHidden({ timeout: 15_000 });
 
   // Navigate to /query and confirm workspace_dev_user is in the tree.
-  await page.getByTestId("nav-link-query").click();
+  await goToQuery(page);
   await expect(page).toHaveURL(/\/query$/);
 
   const userDb = page.getByTestId("tree-db-workspace_dev_user");
