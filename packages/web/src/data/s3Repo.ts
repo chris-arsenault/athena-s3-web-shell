@@ -4,6 +4,7 @@ import {
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
+  type S3ClientConfig,
 } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 
@@ -22,10 +23,28 @@ import { mockS3, simulateUploadProgress } from "./mockS3Store";
 let cachedClient: S3Client | null = null;
 let cachedRegion = "";
 
-function clientFor(provider: AuthProvider, ctx: AuthContext): S3Client {
-  if (cachedClient && cachedRegion === ctx.region) return cachedClient;
-  cachedClient = new S3Client({
+/**
+ * Builds the S3Client config.
+ *
+ * `requestChecksumCalculation: "WHEN_REQUIRED"` is load-bearing. At
+ * @aws-sdk/client-s3 >= 3.729 the default became "WHEN_SUPPORTED", which
+ * silently attaches a CRC32 ChecksumAlgorithm to CreateMultipartUpload.
+ * S3 then requires a ChecksumCRC32 header on every UploadPart call, and
+ * lib-storage's Upload class doesn't reliably propagate it — multipart
+ * uploads above the single-PUT threshold (5 MB) fail with "The upload
+ * was created using a crc32 checksum. The complete request must include
+ * the checksum for each part. It was missing for part 1 in the request."
+ *
+ * Forcing WHEN_REQUIRED reverts to pre-3.729 behavior — checksums only
+ * when the operation mandates them (which multipart doesn't).
+ */
+export function buildS3ClientConfig(
+  provider: AuthProvider,
+  ctx: AuthContext
+): S3ClientConfig {
+  return {
     region: ctx.region,
+    requestChecksumCalculation: "WHEN_REQUIRED",
     credentials: async () => {
       const c = await provider.getCredentials();
       return {
@@ -35,7 +54,12 @@ function clientFor(provider: AuthProvider, ctx: AuthContext): S3Client {
         expiration: new Date(c.expiration),
       };
     },
-  });
+  };
+}
+
+function clientFor(provider: AuthProvider, ctx: AuthContext): S3Client {
+  if (cachedClient && cachedRegion === ctx.region) return cachedClient;
+  cachedClient = new S3Client(buildS3ClientConfig(provider, ctx));
   cachedRegion = ctx.region;
   return cachedClient;
 }
