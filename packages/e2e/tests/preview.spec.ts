@@ -27,23 +27,16 @@ test("non-previewable filenames (e.g. parquet) aren't clickable", async ({
   await page.goto("/workspace");
   await expect(page.locator(".fb-banner")).toBeVisible();
 
-  // Seed the workspace with a .parquet file so we can verify the affordance
-  // is absent. We do this via the datasets / upload path indirectly — but
-  // mock S3 seeds are CSV-only. Instead, drill into sample-data/ where the
-  // seeds are .csv only; verify a hypothetical .parquet (created via the
-  // page) isn't clickable. Simpler: iterate the seeded list and assert
-  // that EVERY `.fb-name-link` corresponds to a previewable extension.
-  //
-  // Stronger assertion: the unique row for welcome.txt has exactly one
-  // button-wrapped name, while any non-previewable row would have a
-  // `.fb-name-text` span without the `.fb-name-link` class.
-  const textLinkCount = await page.locator(".fb-name-link").count();
-  const plainSpanCount = await page
-    .locator(".fb-name-text:not(.fb-name-link)")
+  // File rows use .fb-name-link for previewable and a plain .fb-name-text for
+  // non-previewable. Folder rows also use .fb-name-text but they're not files —
+  // scope to file rows so a folder doesn't register as "non-previewable file".
+  const fileLinkCount = await page.locator(".fb-file .fb-name-link").count();
+  const filePlainCount = await page
+    .locator(".fb-file .fb-name-text:not(.fb-name-link)")
     .count();
 
-  // Mock seeds one top-level text file + folders. All rendered filename
-  // anchors should be buttons (text files); no plain spans at this level.
-  expect(textLinkCount).toBeGreaterThanOrEqual(1);
-  expect(plainSpanCount).toBe(0);
+  // Mock seeds one top-level text file + folders. Every file-row name should
+  // be a button (previewable); no plain spans at this level.
+  expect(fileLinkCount).toBeGreaterThanOrEqual(1);
+  expect(filePlainCount).toBe(0);
 });
