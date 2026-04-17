@@ -7,6 +7,7 @@ import { randomString, sha256Base64Url } from "./pkce";
 import {
   clearSession,
   isExpired,
+  isNearExpiry,
   readPkceTransient,
   readSession,
   savePkceTransient,
@@ -25,6 +26,13 @@ export interface CognitoConfig {
 
 export class CognitoAuthProvider implements AuthProvider {
   constructor(private readonly config: CognitoConfig) {}
+
+  /**
+   * In-flight refresh promise so concurrent callers coalesce onto one
+   * network round-trip. Cleared on settle (success or failure). Module-
+   * private — the provider is a singleton at import time.
+   */
+  private inFlightRefresh: Promise<void> | null = null;
 
   isMock(): boolean {
     return false;
@@ -121,9 +129,60 @@ export class CognitoAuthProvider implements AuthProvider {
   }
 
   async getProxyAuthHeader(): Promise<{ name: string; value: string } | null> {
+    await this.refreshIfNearExpiry();
     const session = readSession();
     if (!session || isExpired(session)) return null;
     return { name: "Authorization", value: `Bearer ${session.idToken}` };
+  }
+
+  /**
+   * Proactively exchange the stored refresh_token when the session is
+   * within the near-expiry window. Coalesces concurrent callers onto a
+   * single in-flight promise so bursts of API calls don't stampede the
+   * token endpoint.
+   */
+  async refreshIfNearExpiry(): Promise<void> {
+    const session = readSession();
+    if (!session || !session.refreshToken) return;
+    if (!isNearExpiry(session)) return;
+    if (this.inFlightRefresh) return this.inFlightRefresh;
+    this.inFlightRefresh = this.doRefresh(session.refreshToken).finally(() => {
+      this.inFlightRefresh = null;
+    });
+    return this.inFlightRefresh;
+  }
+
+  private async doRefresh(refreshToken: string): Promise<void> {
+    const res = await fetch(`https://${this.config.domain}/oauth2/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        client_id: this.config.clientId,
+        refresh_token: refreshToken,
+      }),
+    });
+    if (!res.ok) {
+      // Hard auth failure (invalid_grant, refresh_token expired). Clear
+      // the session so the next requireSession() flows to signInRedirect
+      // — matches today's 401 handler.
+      clearSession();
+      return;
+    }
+    const body = (await res.json()) as {
+      id_token: string;
+      access_token: string;
+      refresh_token?: string;
+      expires_in: number;
+    };
+    writeSession({
+      idToken: body.id_token,
+      accessToken: body.access_token,
+      // Cognito may rotate the refresh_token; persist the new one, else
+      // keep the old.
+      refreshToken: body.refresh_token ?? refreshToken,
+      expiresAt: Date.now() + body.expires_in * 1000,
+    });
   }
 
   async signOut(): Promise<void> {
@@ -139,6 +198,7 @@ export class CognitoAuthProvider implements AuthProvider {
   }
 
   private async requireSession(): Promise<SessionTokens> {
+    await this.refreshIfNearExpiry();
     const session = readSession();
     if (!session || isExpired(session)) {
       await this.signInRedirect();

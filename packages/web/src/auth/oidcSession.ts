@@ -45,6 +45,11 @@ export function isExpired(t: SessionTokens, skewMs = 60_000): boolean {
   return Date.now() + skewMs >= t.expiresAt;
 }
 
+/** True when the session has less than `leewayMs` remaining before expiry. */
+export function isNearExpiry(t: SessionTokens, leewayMs = 300_000): boolean {
+  return Date.now() + leewayMs >= t.expiresAt;
+}
+
 export function savePkceTransient(
   verifier: string,
   state: string,
