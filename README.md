@@ -95,7 +95,7 @@ athena-shell/
 | Proxy endpoints, data flow, repo pattern | [docs/api.md](docs/api.md) |
 | Lint rules, naming, style, gotchas, testing | [docs/conventions.md](docs/conventions.md) |
 | Audit event schema + CloudWatch queries | [docs/audit-schema.md](docs/audit-schema.md) |
-| Shipped features | [CHANGELOG.md](CHANGELOG.md) |
+| Shipped features | [docs/CHANGELOG.md](docs/CHANGELOG.md) |
 | Backlog | [docs/ROADMAP.md](docs/ROADMAP.md) |
 | Deployment ritual (demo account) | [infrastructure/README.md](infrastructure/README.md) |
 | Guidance for Claude Code / AI agents | [CLAUDE.md](CLAUDE.md) |

@@ -1,8 +1,6 @@
 # Changelog
 
-User-facing features shipped on `main`. UI redesigns, internal refactors, bug fixes, and test-infra are out of scope here — see `git log` for those. Companion to [docs/ROADMAP.md](docs/ROADMAP.md) which tracks work still to come.
-
-## Unreleased
+User-facing features shipped on `main`. UI redesigns, internal refactors, bug fixes, and test-infra are out of scope here — see `git log` for those. Companion to [ROADMAP.md](ROADMAP.md) which tracks work still to come.
 
 ### Data layer
 

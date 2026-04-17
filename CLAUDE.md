@@ -43,7 +43,7 @@ Shared is a built package, not a path alias. The `dev` script keeps it compiled 
 | Proxy endpoints, data flow, repo pattern | [docs/api.md](docs/api.md) |
 | Lint rules, naming, style, gotchas, testing | [docs/conventions.md](docs/conventions.md) |
 | Audit events + CloudWatch queries | [docs/audit-schema.md](docs/audit-schema.md) |
-| Shipped features | [CHANGELOG.md](CHANGELOG.md) |
+| Shipped features | [docs/CHANGELOG.md](docs/CHANGELOG.md) |
 | Backlog | [docs/ROADMAP.md](docs/ROADMAP.md) |
 | Deployment ritual (demo account) | [infrastructure/README.md](infrastructure/README.md) |
 
