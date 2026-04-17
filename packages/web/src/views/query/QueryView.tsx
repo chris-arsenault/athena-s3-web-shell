@@ -70,9 +70,11 @@ function QueryViewInner() {
     activeHandleRef.current?.replaceSql(e.sql);
   };
   const onPeekTable = (db: string, table: string) => {
-    activeHandleRef.current?.runSql(
-      `SELECT * FROM \`${db}\`.\`${table}\` LIMIT 10`
-    );
+    // Athena engine v3 (Trino) rejects backtick-quoted identifiers in
+    // DML ("Queries of this type are not supported"). Our sanitizer
+    // already constrains db/table names to [a-z0-9_], so we can safely
+    // emit them unquoted.
+    activeHandleRef.current?.runSql(`SELECT * FROM ${db}.${table} LIMIT 10`);
   };
   const onOpenScratchpad = async (key: string, name: string) => {
     const { content, etag } = await readScratchpad(provider, context, key);
