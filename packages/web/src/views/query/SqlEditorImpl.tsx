@@ -8,6 +8,15 @@ import "./SqlEditor.css";
 interface Props {
   value: string;
   onChange: (next: string) => void;
+  onRunAtCursor?: (offset: number) => void;
+  onRunAll?: () => void;
+  onRunSelection?: (text: string) => void;
+}
+
+interface HandlerRefs {
+  runAtCursor: React.RefObject<((offset: number) => void) | undefined>;
+  runAll: React.RefObject<(() => void) | undefined>;
+  runSelection: React.RefObject<((text: string) => void) | undefined>;
 }
 
 const THEME_NAME = "athena-shell-dark";
@@ -69,12 +78,19 @@ function ensureTheme() {
   themeDefined = true;
 }
 
-export default function SqlEditorImpl({ value, onChange }: Props) {
+export default function SqlEditorImpl(props: Props) {
+  const { value, onChange } = props;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const schema = useSchema();
   const schemaRef = useRef<SchemaValue>(schema);
   schemaRef.current = schema;
+  const runAtCursorRef = useRef(props.onRunAtCursor);
+  const runAllRef = useRef(props.onRunAll);
+  const runSelectionRef = useRef(props.onRunSelection);
+  runAtCursorRef.current = props.onRunAtCursor;
+  runAllRef.current = props.onRunAll;
+  runSelectionRef.current = props.onRunSelection;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -116,6 +132,11 @@ export default function SqlEditorImpl({ value, onChange }: Props) {
       provideCompletionItems: (model, position) =>
         buildSuggestions(model, position, schemaRef.current),
     });
+    registerRunCommands(editor, {
+      runAtCursor: runAtCursorRef,
+      runAll: runAllRef,
+      runSelection: runSelectionRef,
+    });
     return () => {
       sub.dispose();
       completionProvider.dispose();
@@ -130,4 +151,27 @@ export default function SqlEditorImpl({ value, onChange }: Props) {
   }, [value]);
 
   return <div ref={containerRef} className="sql-editor" />;
+}
+
+function registerRunCommands(
+  editor: monaco.editor.IStandaloneCodeEditor,
+  refs: HandlerRefs
+): void {
+  const mod = monaco.KeyMod;
+  const key = monaco.KeyCode;
+  editor.addCommand(mod.CtrlCmd | key.Enter, () => {
+    const pos = editor.getPosition();
+    const model = editor.getModel();
+    if (!pos || !model) return;
+    refs.runAtCursor.current?.(model.getOffsetAt(pos));
+  });
+  editor.addCommand(mod.CtrlCmd | mod.Shift | key.Enter, () => {
+    refs.runAll.current?.();
+  });
+  editor.addCommand(mod.CtrlCmd | mod.Alt | key.Enter, () => {
+    const sel = editor.getSelection();
+    const model = editor.getModel();
+    if (!sel || !model || sel.isEmpty()) return;
+    refs.runSelection.current?.(model.getValueInRange(sel));
+  });
 }

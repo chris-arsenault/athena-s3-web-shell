@@ -7,6 +7,9 @@ const SqlEditorImpl = lazy(() => import("./SqlEditorImpl"));
 interface Props {
   value: string;
   onChange: (next: string) => void;
+  onRunAtCursor?: (offset: number) => void;
+  onRunAll?: () => void;
+  onRunSelection?: (text: string) => void;
 }
 
 export function SqlEditor(props: Props) {

@@ -136,6 +136,28 @@
   color: var(--blueprint-500);
 }
 
+.qbar-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 4px 6px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--r-1);
+}
+
+.qbar-toggle:hover {
+  color: var(--color-text-strong);
+  border-color: var(--color-border-strong);
+}
+
+.qbar-toggle input {
+  accent-color: var(--rust-500);
+  cursor: pointer;
+}
+
 /* ── status readout ─────────────────────────────────────────── */
 .qbar-status {
   display: inline-flex;

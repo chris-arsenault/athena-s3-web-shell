@@ -7,9 +7,12 @@ interface Props {
   onStop: () => void;
   onSave: () => void;
   canSave: boolean;
+  stopOnFailure: boolean;
+  onToggleStopOnFailure: () => void;
 }
 
-export function QueryToolbar({ status, isRunning, onRun, onStop, onSave, canSave }: Props) {
+export function QueryToolbar(props: Props) {
+  const { status, isRunning, onRun, onStop, onSave, canSave } = props;
   const lower = status.toLowerCase();
   const isIdle = lower === "idle" || lower === "";
   return (
@@ -52,6 +55,15 @@ export function QueryToolbar({ status, isRunning, onRun, onStop, onSave, canSave
         <span aria-hidden>◆</span>
         <span>save</span>
       </button>
+
+      <label className="qbar-toggle" data-testid="qbar-stop-on-fail">
+        <input
+          type="checkbox"
+          checked={props.stopOnFailure}
+          onChange={props.onToggleStopOnFailure}
+        />
+        <span className="tracked">stop on fail</span>
+      </label>
 
       <div className="qbar-sweep" aria-hidden />
 

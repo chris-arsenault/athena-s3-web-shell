@@ -1,0 +1,81 @@
+.rq {
+  border-bottom: 1px solid var(--color-border);
+  background: var(--ink-800);
+  padding: var(--s-2) var(--s-3);
+  flex-shrink: 0;
+  max-height: 160px;
+  overflow: auto;
+}
+
+.rq-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: var(--s-1);
+}
+
+.rq-count {
+  font-size: 10px;
+  color: var(--amber-500);
+  letter-spacing: 0.1em;
+}
+
+.rq-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rq-row {
+  border-radius: var(--r-1);
+  border-left: 2px solid transparent;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.rq-row:hover {
+  background: var(--ink-700);
+}
+
+.rq-row.is-selected {
+  background: var(--ink-700);
+  border-left-color: var(--rust-500);
+}
+
+.rq-row.state-running {
+  animation: rq-pulse 1.4s var(--ease-out) infinite;
+}
+
+@keyframes rq-pulse {
+  0%, 100% { background: var(--ink-700); }
+  50% { background: rgba(216, 113, 78, 0.08); }
+}
+
+.rq-pick {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 4px 6px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.rq-idx {
+  color: var(--color-text-dim);
+  font-size: 10px;
+  width: 20px;
+}
+
+.rq-sql {
+  flex: 1;
+  min-width: 0;
+  color: var(--bone-200);
+}
