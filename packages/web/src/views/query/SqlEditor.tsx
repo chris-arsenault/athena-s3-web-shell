@@ -11,6 +11,7 @@ interface Props {
   onRunAll?: () => void;
   onRunSelection?: (text: string) => void;
   onSave?: () => void;
+  onCursorChange?: (offset: number) => void;
 }
 
 export function SqlEditor(props: Props) {

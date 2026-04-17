@@ -48,6 +48,15 @@ resource "aws_iam_role_policy" "proxy_task" {
           "athena:BatchGetQueryExecution",
           "athena:GetWorkGroup",
           "athena:ListWorkGroups",
+          # Named-query library (issue #9). ListNamedQueries + BatchGet
+          # back the sidebar listing; CreateNamedQuery backs "save query",
+          # DeleteNamedQuery backs the × on each row. Scoped to the
+          # per-user workgroups — named queries ARE per-workgroup in
+          # Athena, so listing another user's can't happen here.
+          "athena:CreateNamedQuery",
+          "athena:ListNamedQueries",
+          "athena:BatchGetNamedQuery",
+          "athena:DeleteNamedQuery",
         ]
         # Scope athena ops to the 3 per-user workgroups only.
         # FUTURE (SSO): widen this to a pattern like
@@ -120,6 +129,25 @@ resource "aws_iam_role_policy" "proxy_task" {
         Effect   = "Allow"
         Action   = "s3:ListBucket"
         Resource = aws_s3_bucket.data.arn
+      },
+      # Save-to-workspace (issue #11): the proxy copies the result CSV
+      # (and optionally a .sql sidecar) from the results bucket into
+      # the caller's `users/<username>/...` prefix. IAM permits any
+      # path under `users/*`; the proxy's route-layer guard
+      # (`parseSaveBody`) enforces that the request's targetKey
+      # actually starts with `req.user.s3.prefix`, so one user
+      # can't write into another's prefix.
+      {
+        Sid    = "S3WriteUserWorkspaces"
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:AbortMultipartUpload",
+          "s3:ListMultipartUploadParts",
+        ]
+        Resource = [
+          "${aws_s3_bucket.data.arn}/users/*",
+        ]
       },
       # Athena writes results using the caller's identity — the proxy role
       # needs RW on the results bucket.

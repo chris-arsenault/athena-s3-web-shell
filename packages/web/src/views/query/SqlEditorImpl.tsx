@@ -12,6 +12,7 @@ interface Props {
   onRunAll?: () => void;
   onRunSelection?: (text: string) => void;
   onSave?: () => void;
+  onCursorChange?: (offset: number) => void;
 }
 
 interface HandlerRefs {
@@ -91,46 +92,24 @@ export default function SqlEditorImpl(props: Props) {
   const runAllRef = useRef(props.onRunAll);
   const runSelectionRef = useRef(props.onRunSelection);
   const saveRef = useRef(props.onSave);
+  const cursorChangeRef = useRef(props.onCursorChange);
   runAtCursorRef.current = props.onRunAtCursor;
   runAllRef.current = props.onRunAll;
   runSelectionRef.current = props.onRunSelection;
   saveRef.current = props.onSave;
+  cursorChangeRef.current = props.onCursorChange;
 
   useEffect(() => {
     if (!containerRef.current) return;
     ensureTheme();
-    const editor = monaco.editor.create(containerRef.current, {
-      value,
-      language: "sql",
-      theme: THEME_NAME,
-      automaticLayout: true,
-      minimap: { enabled: false },
-      fontFamily:
-        '"Berkeley Mono", "Commit Mono", "JetBrains Mono", "Iosevka Term", "IBM Plex Mono", "Cascadia Code", "SF Mono", Menlo, Consolas, ui-monospace, monospace',
-      fontLigatures: true,
-      fontSize: 13,
-      lineHeight: 20,
-      letterSpacing: 0.15,
-      lineNumbers: "on",
-      lineNumbersMinChars: 3,
-      glyphMargin: false,
-      scrollBeyondLastLine: false,
-      tabSize: 2,
-      padding: { top: 14, bottom: 14 },
-      renderLineHighlight: "line",
-      cursorBlinking: "smooth",
-      cursorWidth: 2,
-      smoothScrolling: true,
-      quickSuggestions: { other: true, comments: false, strings: false },
-      suggestOnTriggerCharacters: true,
-      scrollbar: {
-        verticalSliderSize: 8,
-        horizontalSliderSize: 8,
-        useShadows: false,
-      },
-    });
+    const editor = monaco.editor.create(containerRef.current, editorOptions(value));
     editorRef.current = editor;
     const sub = editor.onDidChangeModelContent(() => onChange(editor.getValue()));
+    const cursorSub = editor.onDidChangeCursorPosition((e) => {
+      const model = editor.getModel();
+      if (!model) return;
+      cursorChangeRef.current?.(model.getOffsetAt(e.position));
+    });
     const completionProvider = monaco.languages.registerCompletionItemProvider("sql", {
       triggerCharacters: ["."],
       provideCompletionItems: (model, position) =>
@@ -144,6 +123,7 @@ export default function SqlEditorImpl(props: Props) {
     });
     return () => {
       sub.dispose();
+      cursorSub.dispose();
       completionProvider.dispose();
       editor.dispose();
     };
@@ -156,6 +136,39 @@ export default function SqlEditorImpl(props: Props) {
   }, [value]);
 
   return <div ref={containerRef} className="sql-editor" />;
+}
+
+function editorOptions(value: string): monaco.editor.IStandaloneEditorConstructionOptions {
+  return {
+    value,
+    language: "sql",
+    theme: THEME_NAME,
+    automaticLayout: true,
+    minimap: { enabled: false },
+    fontFamily:
+      '"Berkeley Mono", "Commit Mono", "JetBrains Mono", "Iosevka Term", "IBM Plex Mono", "Cascadia Code", "SF Mono", Menlo, Consolas, ui-monospace, monospace',
+    fontLigatures: true,
+    fontSize: 13,
+    lineHeight: 20,
+    letterSpacing: 0.15,
+    lineNumbers: "on",
+    lineNumbersMinChars: 3,
+    glyphMargin: false,
+    scrollBeyondLastLine: false,
+    tabSize: 2,
+    padding: { top: 14, bottom: 14 },
+    renderLineHighlight: "line",
+    cursorBlinking: "smooth",
+    cursorWidth: 2,
+    smoothScrolling: true,
+    quickSuggestions: { other: true, comments: false, strings: false },
+    suggestOnTriggerCharacters: true,
+    scrollbar: {
+      verticalSliderSize: 8,
+      horizontalSliderSize: 8,
+      useShadows: false,
+    },
+  };
 }
 
 function registerRunCommands(

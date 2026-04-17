@@ -136,6 +136,58 @@
   color: var(--blueprint-500);
 }
 
+.qbtn-save-file {
+  padding: 8px 12px;
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  position: relative;
+}
+
+.qbtn-save-file.is-dirty {
+  border-color: var(--amber-500);
+  color: var(--amber-500);
+}
+
+.qbtn-save-file.is-dirty::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--amber-500);
+  box-shadow: 0 0 0 2px var(--ink-800);
+}
+
+.qbtn-run-group {
+  align-items: stretch;
+}
+
+.qbtn-run-all {
+  padding: 8px 12px;
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.qbtn-run-all span[aria-hidden] {
+  color: var(--rust-400);
+}
+
+.qbtn-sub-kbd {
+  background: rgba(0, 0, 0, 0.28);
+  border-color: rgba(244, 239, 228, 0.18);
+  color: var(--bone-300);
+  letter-spacing: 0.08em;
+  font-size: 9.5px;
+}
+
 .qbar-toggle {
   display: inline-flex;
   align-items: center;

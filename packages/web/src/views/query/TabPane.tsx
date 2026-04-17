@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { HistoryEntry, SavedQuery } from "@athena-shell/shared";
 
@@ -28,12 +28,14 @@ export function TabPane(props: Props) {
   const { provider } = useAuth();
   const s = useQueryViewState({ provider, initialSql: tab.sql });
   const [saveError, setSaveError] = useState<string | null>(null);
+  const cursorOffsetRef = useRef<number>(0);
   useTabSync(s, tab, hidden, onPatch, props.onPickSavedSignal, props.onHistorySignal);
   const onScratchpadSave = useScratchpadSave(tab, s, onPatch, setSaveError, props.onScratchpadSaved);
   const onSaved = useCallback(() => {
     s.setSaveOpen(false);
     props.onSavedQueryCreated();
   }, [s, props]);
+  const fileDirty = !!tab.source && s.sql !== (tab.savedSql ?? "");
 
   return (
     <div
@@ -44,12 +46,15 @@ export function TabPane(props: Props) {
       <QueryToolbar
         status={s.displayStateLabel}
         isRunning={s.runQueue.isRunning}
-        onRun={s.runAll}
+        onRunStatement={() => s.runAtCursor(cursorOffsetRef.current)}
+        onRunAll={s.runAll}
         onStop={s.runQueue.stop}
-        onSave={() => s.setSaveOpen(true)}
+        onSaveNamed={() => s.setSaveOpen(true)}
         canSave={s.sql.trim().length > 0 && !s.runQueue.isRunning}
         stopOnFailure={s.stopOnFailure}
         onToggleStopOnFailure={s.toggleStopOnFailure}
+        onSaveFile={tab.source ? onScratchpadSave : undefined}
+        fileDirty={fileDirty}
       />
       <div className="query-editor">
         <SqlEditor
@@ -59,6 +64,9 @@ export function TabPane(props: Props) {
           onRunAll={s.runAll}
           onRunSelection={s.runSelection}
           onSave={tab.source ? onScratchpadSave : undefined}
+          onCursorChange={(offset) => {
+            cursorOffsetRef.current = offset;
+          }}
         />
       </div>
       {saveError && (
