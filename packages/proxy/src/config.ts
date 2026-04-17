@@ -32,7 +32,11 @@ const DEFAULT_MOCK_USER: AuthContext = {
   athena: {
     workgroup: "primary",
     outputLocation: "s3://athena-shell-dev/_athena/dev/",
-    defaultDatabase: "default",
+    // Mock default DB mirrors the live behavior: unqualified table names
+    // resolve against the caller's own workspace. The seeded mock tables
+    // in `default` / `sales` still work when qualified (e.g.
+    // `default.events`).
+    defaultDatabase: "workspace_dev_user",
     userDatabase: "workspace_dev_user",
   },
 };

@@ -69,7 +69,11 @@ export class AlbAuthProvider implements AuthProvider {
       athena: {
         workgroup: `${this.config.namePrefix}-${username}`,
         outputLocation: `s3://${this.config.resultsBucket}/${prefix}`,
-        defaultDatabase: this.config.glueDatabase,
+        // Default DB = the caller's own workspace, so unqualified SELECTs
+        // resolve against their own tables (SELECT * FROM customers works
+        // for workspace_test_athena_1.customers without prefixing). Tables
+        // in the shared demo DB stay addressable via athena_shell_demo.x.
+        defaultDatabase: `workspace_${username}`,
         userDatabase: `workspace_${username}`,
       },
     };
