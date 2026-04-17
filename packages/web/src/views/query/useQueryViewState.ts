@@ -9,10 +9,11 @@ import { useRunQueue, type QueueItem } from "./useRunQueue";
 
 interface Args {
   provider: AuthProvider;
+  initialSql?: string;
 }
 
-export function useQueryViewState({ provider }: Args) {
-  const [sql, setSql] = useState("SELECT 1 AS hello");
+export function useQueryViewState({ provider, initialSql = "SELECT 1 AS hello" }: Args) {
+  const [sql, setSql] = useState(initialSql);
   const [saveOpen, setSaveOpen] = useState(false);
   const [savedKey, setSavedKey] = useState(0);
   const [stopOnFailure, setStopOnFailure] = useState(false);

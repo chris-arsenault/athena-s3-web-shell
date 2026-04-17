@@ -1,18 +1,16 @@
+import { useState } from "react";
+
 import type { HistoryEntry, SavedQuery } from "@athena-shell/shared";
 
 import { useAuth } from "../../auth/authContext";
-import { ErrorBanner } from "../../components/ErrorBanner";
 import { LoadingSpinner } from "../../components/LoadingSpinner";
 import { SchemaProvider } from "../../data/schemaContext";
 import { HistoryPanel } from "./HistoryPanel";
-import { QueryToolbar } from "./QueryToolbar";
-import { ResultsPane } from "./ResultsPane";
-import { RunQueuePanel } from "./RunQueuePanel";
-import { SaveQueryModal } from "./SaveQueryModal";
 import { SavedQueriesPanel } from "./SavedQueriesPanel";
 import { SchemaTree } from "./SchemaTree";
-import { SqlEditor } from "./SqlEditor";
-import { selectedError, useQueryViewState } from "./useQueryViewState";
+import { TabPane } from "./TabPane";
+import { TabStrip } from "./TabStrip";
+import { useTabs, type Tab } from "./useTabs";
 import "./QueryView.css";
 
 export function QueryView() {
@@ -24,71 +22,64 @@ export function QueryView() {
 }
 
 function QueryViewInner() {
-  const { provider, context, loading } = useAuth();
-  const s = useQueryViewState({ provider });
-  if (loading || !context) return <LoadingSpinner label="query workspace" />;
+  const { context, loading } = useAuth();
+  const tabsApi = useTabs();
+  const [savedSignal, setSavedSignal] =
+    useState<{ queryId: string; sql: string } | null>(null);
+  const [historySignal, setHistorySignal] =
+    useState<{ executionId: string; sql: string } | null>(null);
+  const [savedKey, setSavedKey] = useState(0);
+
+  if (loading || !context || !tabsApi.ready) {
+    return <LoadingSpinner label="query workspace" />;
+  }
+
+  const onPickSaved = (q: SavedQuery) => {
+    setSavedSignal({ queryId: q.id + "-" + Date.now(), sql: q.sql });
+  };
+  const onSelectHistory = (e: HistoryEntry) => {
+    setHistorySignal({ executionId: e.executionId + "-" + Date.now(), sql: e.sql });
+  };
+
   return (
     <div className="query-view flex-row flex-1">
       <aside className="query-side flex-col">
         <SchemaTree />
         <SavedQueriesPanel
-          refreshKey={s.savedKey}
-          onPick={(q: SavedQuery) => s.replaceSql(q.sql)}
-          onChanged={s.bumpSavedKey}
+          refreshKey={savedKey}
+          onPick={onPickSaved}
+          onChanged={() => setSavedKey((k) => k + 1)}
         />
       </aside>
-      <section className="query-main flex-col flex-1">
-        <QueryToolbar
-          status={s.displayStateLabel}
-          isRunning={s.runQueue.isRunning}
-          onRun={s.runAll}
-          onStop={s.runQueue.stop}
-          onSave={openSave(s)}
-          canSave={s.canSave}
-          stopOnFailure={s.stopOnFailure}
-          onToggleStopOnFailure={s.toggleStopOnFailure}
+      <section className="query-main-wrap flex-col flex-1">
+        <TabStrip
+          tabs={tabsApi.tabs}
+          activeId={tabsApi.activeId}
+          onActivate={tabsApi.setActive}
+          onClose={tabsApi.closeTab}
+          onNew={() => tabsApi.newTab()}
+          onRename={tabsApi.renameTab}
         />
-        <div className="query-editor">
-          <SqlEditor
-            value={s.sql}
-            onChange={s.setSql}
-            onRunAtCursor={s.runAtCursor}
-            onRunAll={s.runAll}
-            onRunSelection={s.runSelection}
-          />
+        <div className="query-panes flex-1">
+          {tabsApi.tabs.map((tab) => (
+            <TabPane
+              key={tab.id}
+              tab={tab}
+              hidden={tab.id !== tabsApi.activeId}
+              onPatch={(patch: Partial<Tab>) => tabsApi.patchTab(tab.id, patch)}
+              onPickSavedSignal={tab.id === tabsApi.activeId ? savedSignal : null}
+              onHistorySignal={tab.id === tabsApi.activeId ? historySignal : null}
+              onSavedQueryCreated={() => setSavedKey((k) => k + 1)}
+            />
+          ))}
         </div>
-        <RunQueuePanel
-          queue={s.runQueue.queue}
-          selectedId={s.runQueue.selectedId}
-          onSelect={s.selectQueueItem}
-        />
-        <ErrorBanner error={selectedError(s.selected)} onDismiss={noop} />
-        <ResultsPane
-          results={s.displayResults}
-          status={s.displayStatus}
-          loadingMore={s.loadingMore}
-          onLoadMore={s.onLoadMore}
-        />
       </section>
       <aside className="query-history">
         <HistoryPanel
-          onSelect={(e: HistoryEntry) => s.replaceSql(e.sql)}
-          refreshKey={s.selected?.executionId ?? ""}
+          onSelect={onSelectHistory}
+          refreshKey={tabsApi.activeTab?.lastExecutionId ?? ""}
         />
       </aside>
-      {s.saveOpen && (
-        <SaveQueryModal sql={s.sql} onClose={closeSave(s)} onSaved={onSaved(s)} />
-      )}
     </div>
   );
 }
-
-type S = ReturnType<typeof useQueryViewState>;
-const openSave = (s: S) => () => s.setSaveOpen(true);
-const closeSave = (s: S) => () => s.setSaveOpen(false);
-const onSaved = (s: S) => () => {
-  s.setSaveOpen(false);
-  s.bumpSavedKey();
-};
-
-function noop() {}

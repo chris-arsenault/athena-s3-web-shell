@@ -1,23 +1,30 @@
 import { openDB, type IDBPDatabase } from "idb";
 
 const DB_NAME = "athena-shell";
-// v2: drops the legacy `namedQueries` store. Saved queries now live in Athena
-// (workgroup-scoped) via the proxy; keeping a parallel IndexedDB copy would
-// drift.
-const DB_VERSION = 2;
-
-export interface Draft {
-  id: number;
-  title: string;
-  sql: string;
-  updatedAt: string;
-}
+// v3: swaps the old `drafts` store for `tabs` + `session`. Backs #10
+// (multi-tab persistence). No migration — there was no deployed data.
+const DB_VERSION = 3;
 
 export interface Favorite {
   id: number;
   executionId: string;
   sql: string;
   savedAt: string;
+}
+
+export interface TabRecord {
+  id: string;
+  name: string;
+  sql: string;
+  database?: string;
+  lastExecutionId?: string;
+  order: number;
+  updatedAt: string;
+}
+
+export interface SessionEntry {
+  key: string;
+  value: string;
 }
 
 let dbPromise: Promise<IDBPDatabase> | null = null;
@@ -27,40 +34,26 @@ function getDb(): Promise<IDBPDatabase> {
     dbPromise = openDB(DB_NAME, DB_VERSION, {
       upgrade(db, oldVersion) {
         if (oldVersion < 1) {
-          const drafts = db.createObjectStore("drafts", { keyPath: "id", autoIncrement: true });
-          drafts.createIndex("updatedAt", "updatedAt");
-          const favorites = db.createObjectStore("favorites", { keyPath: "id", autoIncrement: true });
-          favorites.createIndex("executionId", "executionId", { unique: true });
+          const fav = db.createObjectStore("favorites", {
+            keyPath: "id",
+            autoIncrement: true,
+          });
+          fav.createIndex("executionId", "executionId", { unique: true });
         }
         if (oldVersion < 2 && db.objectStoreNames.contains("namedQueries")) {
           db.deleteObjectStore("namedQueries");
+        }
+        if (oldVersion < 3) {
+          if (db.objectStoreNames.contains("drafts")) db.deleteObjectStore("drafts");
+          const tabs = db.createObjectStore("tabs", { keyPath: "id" });
+          tabs.createIndex("order", "order");
+          db.createObjectStore("session", { keyPath: "key" });
         }
       },
     });
   }
   return dbPromise;
 }
-
-export const drafts = {
-  async list(): Promise<Draft[]> {
-    const db = await getDb();
-    return (await db.getAllFromIndex("drafts", "updatedAt")).reverse() as Draft[];
-  },
-  async save(draft: Omit<Draft, "id">): Promise<number> {
-    const db = await getDb();
-    return (await db.add("drafts", draft)) as number;
-  },
-  async update(id: number, patch: Partial<Draft>): Promise<void> {
-    const db = await getDb();
-    const cur = (await db.get("drafts", id)) as Draft | undefined;
-    if (!cur) return;
-    await db.put("drafts", { ...cur, ...patch });
-  },
-  async remove(id: number): Promise<void> {
-    const db = await getDb();
-    await db.delete("drafts", id);
-  },
-};
 
 export const favorites = {
   async list(): Promise<Favorite[]> {
@@ -80,6 +73,42 @@ export const favorites = {
       | undefined;
     if (!existing) return;
     await db.delete("favorites", existing.id);
+  },
+};
+
+export const tabs = {
+  async list(): Promise<TabRecord[]> {
+    const db = await getDb();
+    const all = (await db.getAllFromIndex("tabs", "order")) as TabRecord[];
+    return all;
+  },
+  async upsert(rec: TabRecord): Promise<void> {
+    const db = await getDb();
+    await db.put("tabs", rec);
+  },
+  async remove(id: string): Promise<void> {
+    const db = await getDb();
+    await db.delete("tabs", id);
+  },
+  async clear(): Promise<void> {
+    const db = await getDb();
+    await db.clear("tabs");
+  },
+};
+
+export const session = {
+  async get(key: string): Promise<string | null> {
+    const db = await getDb();
+    const e = (await db.get("session", key)) as SessionEntry | undefined;
+    return e?.value ?? null;
+  },
+  async set(key: string, value: string): Promise<void> {
+    const db = await getDb();
+    await db.put("session", { key, value });
+  },
+  async remove(key: string): Promise<void> {
+    const db = await getDb();
+    await db.delete("session", key);
   },
 };
 

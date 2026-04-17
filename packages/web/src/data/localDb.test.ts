@@ -1,19 +1,9 @@
-import { openDB } from "idb";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { _resetForTests, drafts, favorites } from "./localDb";
+import { _resetForTests, favorites, session, tabs } from "./localDb";
 
 afterEach(async () => {
   await _resetForTests();
-});
-
-describe("drafts", () => {
-  it("saves and lists newest first", async () => {
-    await drafts.save({ title: "a", sql: "SELECT 1", updatedAt: "2026-01-01T00:00:00Z" });
-    await drafts.save({ title: "b", sql: "SELECT 2", updatedAt: "2026-02-01T00:00:00Z" });
-    const list = await drafts.list();
-    expect(list.map((d) => d.title)).toEqual(["b", "a"]);
-  });
 });
 
 describe("favorites", () => {
@@ -29,27 +19,63 @@ describe("favorites", () => {
   });
 });
 
-describe("v2 migration", () => {
-  it("drops the legacy namedQueries store on upgrade from v1", async () => {
-    const v1 = await openDB("athena-shell", 1, {
-      upgrade(db) {
-        const d = db.createObjectStore("drafts", { keyPath: "id", autoIncrement: true });
-        d.createIndex("updatedAt", "updatedAt");
-        const f = db.createObjectStore("favorites", { keyPath: "id", autoIncrement: true });
-        f.createIndex("executionId", "executionId", { unique: true });
-        const n = db.createObjectStore("namedQueries", { keyPath: "id", autoIncrement: true });
-        n.createIndex("name", "name", { unique: true });
-      },
+describe("tabs", () => {
+  it("upserts + lists in order", async () => {
+    await tabs.upsert({
+      id: "a",
+      name: "A",
+      sql: "SELECT 1",
+      order: 1,
+      updatedAt: "2026-01-01T00:00:00Z",
     });
-    await v1.add("namedQueries", { name: "legacy", sql: "SELECT 1" });
-    v1.close();
+    await tabs.upsert({
+      id: "b",
+      name: "B",
+      sql: "SELECT 2",
+      order: 0,
+      updatedAt: "2026-01-01T00:00:00Z",
+    });
+    const list = await tabs.list();
+    expect(list.map((t) => t.id)).toEqual(["b", "a"]);
+  });
+  it("upsert updates existing", async () => {
+    await tabs.upsert({
+      id: "a",
+      name: "A",
+      sql: "SELECT 1",
+      order: 0,
+      updatedAt: "x",
+    });
+    await tabs.upsert({
+      id: "a",
+      name: "A2",
+      sql: "SELECT 2",
+      order: 0,
+      updatedAt: "y",
+    });
+    const list = await tabs.list();
+    expect(list).toHaveLength(1);
+    expect(list[0]?.sql).toBe("SELECT 2");
+  });
+  it("remove deletes a tab", async () => {
+    await tabs.upsert({
+      id: "a",
+      name: "A",
+      sql: "",
+      order: 0,
+      updatedAt: "x",
+    });
+    await tabs.remove("a");
+    expect(await tabs.list()).toEqual([]);
+  });
+});
 
-    await drafts.list();
-
-    const v2 = await openDB("athena-shell", 2);
-    expect(Array.from(v2.objectStoreNames)).not.toContain("namedQueries");
-    expect(Array.from(v2.objectStoreNames)).toContain("drafts");
-    expect(Array.from(v2.objectStoreNames)).toContain("favorites");
-    v2.close();
+describe("session", () => {
+  it("round-trips key/value", async () => {
+    await session.set("activeTabId", "tab-1");
+    expect(await session.get("activeTabId")).toBe("tab-1");
+  });
+  it("returns null for unset keys", async () => {
+    expect(await session.get("missing")).toBeNull();
   });
 });

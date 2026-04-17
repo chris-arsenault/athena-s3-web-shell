@@ -6,6 +6,7 @@ import { useAuth } from "../../auth/authContext";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { LoadingSpinner } from "../../components/LoadingSpinner";
 import { tableFileTypeFor } from "../../data/datasetsRepo";
+import { session } from "../../data/localDb";
 import {
   createFolder as createFolderRepo,
   deleteObject,
@@ -22,6 +23,32 @@ import { useFileListing } from "./useFileListing";
 import { useUploads } from "./useUploads";
 import "./WorkspaceView.css";
 
+const WORKSPACE_PREFIX_KEY = "workspacePrefix";
+
+function usePersistedPrefix(
+  root: string | undefined,
+  prefix: string,
+  setPrefix: (p: string) => void
+): void {
+  useEffect(() => {
+    if (!root || prefix) return;
+    let cancelled = false;
+    void (async () => {
+      const stored = await session.get(WORKSPACE_PREFIX_KEY);
+      if (cancelled) return;
+      const candidate = stored && stored.startsWith(root) ? stored : root;
+      setPrefix(candidate);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [root, prefix, setPrefix]);
+
+  useEffect(() => {
+    if (prefix) void session.set(WORKSPACE_PREFIX_KEY, prefix);
+  }, [prefix]);
+}
+
 interface RegisterTarget {
   file: S3Object;
   fileType: DatasetFileType;
@@ -35,9 +62,7 @@ export function WorkspaceView() {
   const [previewing, setPreviewing] = useState<S3Object | null>(null);
   const uploads = useUploads({ provider, context, prefix, onComplete: refresh });
 
-  useEffect(() => {
-    if (context && !prefix) setPrefix(context.s3.prefix);
-  }, [context, prefix]);
+  usePersistedPrefix(context?.s3.prefix, prefix, setPrefix);
 
   const onCreateFolder = useCallback(
     async (name: string) => {
