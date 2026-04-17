@@ -1,9 +1,14 @@
-import type { S3Folder, S3Listing, S3Object } from "@athena-shell/shared";
+import { useNavigate } from "react-router-dom";
 
+import type { S3Folder, S3Listing, S3Object, TableRef } from "@athena-shell/shared";
+
+import { useAuth } from "../../auth/authContext";
 import { EmptyState } from "../../components/EmptyState";
 import { LoadingSpinner } from "../../components/LoadingSpinner";
 import { tableFileTypeFor } from "../../data/datasetsRepo";
+import { useSchema } from "../../data/schemaContext";
 import { fileTypeIcon } from "../../utils/fileTypeIcon";
+import { findBackingTable, type BackingTable } from "../../utils/findBackingTable";
 import { formatBytes } from "../../utils/formatBytes";
 import { formatDate } from "../../utils/formatDate";
 import { isPreviewable } from "../../utils/previewable";
@@ -26,6 +31,7 @@ export function FileBrowser({
   onRegisterTable,
   onPreview,
 }: Props) {
+  const allTables = useAllTables();
   if (!listing) return <LoadingSpinner label="listing" />;
   const total = listing.folders.length + listing.objects.length;
   if (total === 0) {
@@ -47,7 +53,7 @@ export function FileBrowser({
       <div className="fb-grid">
         <HeadRow />
         {listing.folders.map((f) => (
-          <FolderRow key={f.key} folder={f} onOpen={onOpen} />
+          <FolderRow key={f.key} folder={f} onOpen={onOpen} tables={allTables} />
         ))}
         {listing.objects.map((o) => (
           <FileRow
@@ -57,6 +63,7 @@ export function FileBrowser({
             onDelete={onDelete}
             onRegisterTable={onRegisterTable}
             onPreview={onPreview}
+            tables={allTables}
           />
         ))}
       </div>
@@ -90,9 +97,33 @@ function HeadRow() {
   );
 }
 
-function FolderRow({ folder, onOpen }: { folder: S3Folder; onOpen: (p: string) => void }) {
+function FolderRow({
+  folder,
+  onOpen,
+  tables,
+}: {
+  folder: S3Folder;
+  onOpen: (p: string) => void;
+  tables: TableRef[];
+}) {
+  const { context } = useAuth();
+  const backing = context
+    ? findBackingTable(folder.key, context.s3.bucket, tables)
+    : null;
+  const openFolder = () => onOpen(folder.key);
   return (
-    <button className="fb-row fb-clickable fb-folder" onClick={() => onOpen(folder.key)}>
+    <div
+      className="fb-row fb-clickable fb-folder"
+      role="button"
+      tabIndex={0}
+      onClick={openFolder}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          openFolder();
+        }
+      }}
+    >
       <span className="fb-name">
         <span className="ftype ftype-dir" aria-hidden>▤</span>
         <span className="truncate fb-name-text">{folder.name}/</span>
@@ -100,9 +131,10 @@ function FolderRow({ folder, onOpen }: { folder: S3Folder; onOpen: (p: string) =
       <span className="text-dim mono text-right">—</span>
       <span className="text-dim mono">—</span>
       <span className="fb-actions fb-actions-folder">
+        {backing && <QueryCrosslink backing={backing} rowKey={folder.key} />}
         <span className="fb-open-hint tracked">open →</span>
       </span>
-    </button>
+    </div>
   );
 }
 
@@ -112,6 +144,7 @@ interface FileRowProps {
   onDelete: (key: string) => void | Promise<void>;
   onRegisterTable: (obj: S3Object) => void;
   onPreview: (obj: S3Object) => void;
+  tables: TableRef[];
 }
 
 function FileRow({
@@ -120,10 +153,15 @@ function FileRow({
   onDelete,
   onRegisterTable,
   onPreview,
+  tables,
 }: FileRowProps) {
+  const { context } = useAuth();
   const type = fileTypeIcon(obj.name);
   const canRegister = tableFileTypeFor(obj.name) !== null;
   const canPreview = isPreviewable(obj.name);
+  const backing = context
+    ? findBackingTable(obj.key, context.s3.bucket, tables)
+    : null;
   return (
     <div className="fb-row fb-file">
       <span className="fb-name">
@@ -143,6 +181,7 @@ function FileRow({
       <span className="mono text-right tnum fb-size">{formatBytes(obj.size)}</span>
       <span className="mono tnum text-muted fb-date">{formatDate(obj.lastModified)}</span>
       <span className="fb-actions flex-row gap-1">
+        {backing && <QueryCrosslink backing={backing} rowKey={obj.key} />}
         {canRegister && (
           <button
             className="btn btn-ghost fb-action"
@@ -165,4 +204,37 @@ function FileRow({
       </span>
     </div>
   );
+}
+
+function QueryCrosslink({
+  backing,
+  rowKey,
+}: {
+  backing: BackingTable;
+  rowKey: string;
+}) {
+  const navigate = useNavigate();
+  const label = `${backing.database}.${backing.table}`;
+  return (
+    <button
+      className="btn btn-ghost fb-action fb-action-crosslink"
+      title={`Query table: ${label}`}
+      data-testid={`fb-link-query-${rowKey}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        navigate(`/query?prefillTable=${encodeURIComponent(label)}`);
+      }}
+    >
+      ⌕ query
+    </button>
+  );
+}
+
+function useAllTables(): TableRef[] {
+  const { tablesByDb } = useSchema();
+  const out: TableRef[] = [];
+  for (const list of Object.values(tablesByDb)) {
+    for (const t of list) out.push(t);
+  }
+  return out;
 }

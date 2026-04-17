@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import type { HistoryEntry, SavedQuery } from "@athena-shell/shared";
 
 import { useAuth } from "../../auth/authContext";
 import { LoadingSpinner } from "../../components/LoadingSpinner";
 import { readScratchpad } from "../../data/scratchpadRepo";
-import { SchemaProvider } from "../../data/schemaContext";
 import { HistoryPanel } from "./HistoryPanel";
 import { SavedQueriesPanel } from "./SavedQueriesPanel";
 import { SchemaTree } from "./SchemaTree";
@@ -15,12 +15,32 @@ import { TabStrip } from "./TabStrip";
 import { useTabs, type Tab } from "./useTabs";
 import "./QueryView.css";
 
+type SavedSignalSetter = React.Dispatch<
+  React.SetStateAction<{ queryId: string; sql: string } | null>
+>;
+
+function usePrefillTableParam(
+  ready: boolean,
+  setSavedSignal: SavedSignalSetter
+): void {
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    if (!ready) return;
+    const prefill = params.get("prefillTable");
+    if (!prefill) return;
+    setSavedSignal({
+      queryId: `prefill-${prefill}-${Date.now()}`,
+      sql: `SELECT * FROM ${prefill} LIMIT 100`,
+    });
+    // Scrub the param so a reload doesn't keep re-firing the prefill.
+    const next = new URLSearchParams(params);
+    next.delete("prefillTable");
+    setParams(next, { replace: true });
+  }, [ready, params, setParams, setSavedSignal]);
+}
+
 export function QueryView() {
-  return (
-    <SchemaProvider>
-      <QueryViewInner />
-    </SchemaProvider>
-  );
+  return <QueryViewInner />;
 }
 
 function QueryViewInner() {
@@ -32,6 +52,7 @@ function QueryViewInner() {
     useState<{ executionId: string; sql: string } | null>(null);
   const [savedKey, setSavedKey] = useState(0);
   const [scratchpadKey, setScratchpadKey] = useState(0);
+  usePrefillTableParam(tabsApi.ready, setSavedSignal);
 
   if (loading || !context || !tabsApi.ready) {
     return <LoadingSpinner label="query workspace" />;

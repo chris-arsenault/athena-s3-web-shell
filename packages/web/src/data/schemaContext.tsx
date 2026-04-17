@@ -19,6 +19,9 @@ export interface SchemaValue {
   columnsByTable: Record<string, Column[]>;
   loadTables: (db: string) => Promise<TableRef[]>;
   loadColumns: (db: string, table: string) => Promise<Column[]>;
+  /** Re-run the eager database + per-db tables fetch. Call after a
+   *  mutation that adds/changes tables (e.g. CREATE TABLE). */
+  refresh: () => Promise<void>;
 }
 
 const SchemaCtx = createContext<SchemaValue | null>(null);
@@ -51,26 +54,28 @@ function useSchemaState(): SchemaValue {
     columnsRef.current = columnsByTable;
   }, [columnsByTable]);
 
+  const refresh = useCallback(async (): Promise<void> => {
+    const dbPage = await listDatabases(provider);
+    setDatabases(dbPage.items);
+    const results = await Promise.all(
+      dbPage.items.map((db) =>
+        listTables(provider, db.name).then((p) => [db.name, p.items] as const)
+      )
+    );
+    const next = Object.fromEntries(results);
+    tablesRef.current = next;
+    setTablesByDb(next);
+  }, [provider]);
+
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      const dbPage = await listDatabases(provider);
-      if (cancelled) return;
-      setDatabases(dbPage.items);
-      const results = await Promise.all(
-        dbPage.items.map((db) =>
-          listTables(provider, db.name).then((p) => [db.name, p.items] as const)
-        )
-      );
-      if (cancelled) return;
-      setTablesByDb(Object.fromEntries(results));
-    })().catch((err) => {
-      console.error("[schema] eager load failed:", err);
+    refresh().catch((err) => {
+      if (!cancelled) console.error("[schema] eager load failed:", err);
     });
     return () => {
       cancelled = true;
     };
-  }, [provider]);
+  }, [refresh]);
 
   const loadTables = useCallback(
     async (db: string): Promise<TableRef[]> => {
@@ -97,5 +102,5 @@ function useSchemaState(): SchemaValue {
     [provider]
   );
 
-  return { databases, tablesByDb, columnsByTable, loadTables, loadColumns };
+  return { databases, tablesByDb, columnsByTable, loadTables, loadColumns, refresh };
 }

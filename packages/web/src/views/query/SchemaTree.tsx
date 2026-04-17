@@ -1,9 +1,12 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import type { Column, DatabaseRef, TableRef } from "@athena-shell/shared";
 
+import { useAuth } from "../../auth/authContext";
 import { LoadingSpinner } from "../../components/LoadingSpinner";
 import { useSchema } from "../../data/schemaContext";
+import { locationToPrefix } from "../../utils/locationToPrefix";
 import "./SchemaTree.css";
 
 const NO_TABLES: TableRef[] = [];
@@ -112,15 +115,18 @@ interface TblItemProps {
 function TblItem({ db, table, open, columns, onToggle }: TblItemProps) {
   return (
     <li>
-      <button
-        className={`tree-row tree-tbl-row ${open ? "is-open" : ""}`}
-        onClick={onToggle}
-        data-testid={`tree-tbl-${db}-${table.name}`}
-      >
-        <span className="tree-caret">{open ? "▾" : "▸"}</span>
-        <span className="tree-kind tree-kind-tbl">▤</span>
-        <span className="truncate tree-name">{table.name}</span>
-      </button>
+      <div className={`tree-row tree-tbl-row ${open ? "is-open" : ""}`}>
+        <button
+          className="tree-row-pick"
+          onClick={onToggle}
+          data-testid={`tree-tbl-${db}-${table.name}`}
+        >
+          <span className="tree-caret">{open ? "▾" : "▸"}</span>
+          <span className="tree-kind tree-kind-tbl">▤</span>
+          <span className="truncate tree-name">{table.name}</span>
+        </button>
+        <WorkspaceLink table={table} />
+      </div>
       {open && columns && (
         <ul className="tree-list tree-cols">
           {columns.map((c) => (
@@ -129,6 +135,30 @@ function TblItem({ db, table, open, columns, onToggle }: TblItemProps) {
         </ul>
       )}
     </li>
+  );
+}
+
+function WorkspaceLink({ table }: { table: TableRef }) {
+  const { context } = useAuth();
+  const navigate = useNavigate();
+  if (!context) return null;
+  const loc = locationToPrefix(table.location);
+  if (!loc) return null;
+  if (loc.bucket !== context.s3.bucket) return null;
+  if (!loc.prefix.startsWith(context.s3.prefix)) return null;
+  return (
+    <button
+      className="tree-crosslink"
+      title={`Browse backing files: ${loc.prefix}`}
+      aria-label={`Browse ${table.database}.${table.name} in workspace`}
+      data-testid={`tree-link-workspace-${table.database}-${table.name}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        navigate(`/workspace?prefix=${encodeURIComponent(loc.prefix)}`);
+      }}
+    >
+      ⇡
+    </button>
   );
 }
 

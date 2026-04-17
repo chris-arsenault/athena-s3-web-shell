@@ -12,6 +12,7 @@ import type { AuthProvider } from "../../auth/AuthProvider";
 import { useAuth } from "../../auth/authContext";
 import { createTable, inferSchema } from "../../data/datasetsRepo";
 import { getQuery } from "../../data/queryRepo";
+import { useSchema } from "../../data/schemaContext";
 import "./CreateTableModal.css";
 
 interface Props {
@@ -23,6 +24,7 @@ interface Props {
 
 export function CreateTableModal({ file, fileType, onClose, onCreated }: Props) {
   const { provider, context } = useAuth();
+  const schema = useSchema();
   const [columns, setColumns] = useState<DatasetColumn[]>([]);
   const [tableName, setTableName] = useState(() => defaultTableName(file.name));
   const [inferring, setInferring] = useState(true);
@@ -59,6 +61,9 @@ export function CreateTableModal({ file, fileType, onClose, onCreated }: Props) 
         skipHeader: true,
       });
       await pollDdl(provider, executionId);
+      // Pull the new table into the shared SchemaProvider cache so
+      // crosslinks + the schema tree pick it up without a page reload.
+      await schema.refresh();
       onCreated();
     } catch (e) {
       setError(e as Error);

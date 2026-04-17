@@ -6,15 +6,18 @@ import { provider } from "./auth/provider";
 import { AppShell } from "./components/AppShell";
 import { AuthSplash } from "./components/AuthSplash";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { SchemaProvider } from "./data/schemaContext";
 
 export function App() {
   return (
     <AuthProviderProvider provider={provider}>
       <ErrorBoundary>
         <AuthGate>
-          <AppShell>
-            <Outlet />
-          </AppShell>
+          <SchemaProvider>
+            <AppShell>
+              <Outlet />
+            </AppShell>
+          </SchemaProvider>
         </AuthGate>
       </ErrorBoundary>
     </AuthProviderProvider>

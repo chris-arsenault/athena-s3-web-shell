@@ -71,6 +71,50 @@
   color: var(--color-text-strong);
 }
 
+/* Table row is a div holding a picker button + a crosslink button. */
+.tree-tbl-row {
+  padding: 0;
+}
+
+.tree-row-pick {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  background: transparent;
+  border: none;
+  color: inherit;
+  padding: 4px 6px;
+  text-align: left;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+.tree-crosslink {
+  background: transparent;
+  border: none;
+  color: var(--color-text-dim);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--r-1);
+  opacity: 0;
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out);
+}
+
+.tree-tbl-row:hover .tree-crosslink {
+  opacity: 0.9;
+}
+
+.tree-crosslink:hover {
+  color: var(--phosphor-500);
+  background: rgba(0, 0, 0, 0.2);
+}
+
 .tree-db-row.is-open .tree-kind,
 .tree-db-row.is-open .tree-idx {
   color: var(--rust-400);

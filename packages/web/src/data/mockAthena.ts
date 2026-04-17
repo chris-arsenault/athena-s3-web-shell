@@ -18,12 +18,32 @@ const DATABASES: DatabaseRef[] = [
 
 const TABLES: Record<string, TableRef[]> = {
   default: [
-    { name: "events", database: "default", type: "EXTERNAL_TABLE" },
-    { name: "users", database: "default", type: "EXTERNAL_TABLE" },
+    {
+      name: "events",
+      database: "default",
+      type: "EXTERNAL_TABLE",
+      location: "s3://athena-shell-dev/datasets/events/",
+    },
+    {
+      name: "users",
+      database: "default",
+      type: "EXTERNAL_TABLE",
+      location: "s3://athena-shell-dev/datasets/users/",
+    },
   ],
   sales: [
-    { name: "orders", database: "sales", type: "EXTERNAL_TABLE" },
-    { name: "customers", database: "sales", type: "EXTERNAL_TABLE" },
+    {
+      name: "orders",
+      database: "sales",
+      type: "EXTERNAL_TABLE",
+      location: "s3://athena-shell-dev/datasets/orders/",
+    },
+    {
+      name: "customers",
+      database: "sales",
+      type: "EXTERNAL_TABLE",
+      location: "s3://athena-shell-dev/datasets/customers/",
+    },
   ],
 };
 

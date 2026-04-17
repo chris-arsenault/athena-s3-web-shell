@@ -37,7 +37,12 @@ export const mockDatasets = {
     const table = sanitizeIdent(req.table);
     const executionId = `mock-ddl-${Math.random().toString(36).slice(2, 10)}`;
 
-    const ref: TableRef = { name: table, database, type: "EXTERNAL_TABLE" };
+    const ref: TableRef = {
+      name: table,
+      database,
+      type: "EXTERNAL_TABLE",
+      location: req.location,
+    };
     const detail: TableDetail = {
       name: table,
       database,

@@ -39,6 +39,7 @@ export async function listTables(
       database,
       type: t.TableType,
       description: t.Description,
+      location: t.StorageDescriptor?.Location,
     })),
     nextToken: out.NextToken,
   };

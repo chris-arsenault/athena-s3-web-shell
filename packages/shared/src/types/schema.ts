@@ -8,6 +8,8 @@ export interface TableRef {
   database: string;
   type?: string;
   description?: string;
+  /** s3://bucket/prefix/ — populated from Glue's StorageDescriptor when available. */
+  location?: string;
 }
 
 export interface Column {

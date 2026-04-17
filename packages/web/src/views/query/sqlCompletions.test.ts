@@ -54,6 +54,7 @@ function makeSchema(overrides: Partial<SchemaValue> = {}): SchemaValue {
     columnsByTable: {},
     loadTables: async () => [],
     loadColumns: async () => [],
+    refresh: async () => undefined,
     ...overrides,
   };
 }

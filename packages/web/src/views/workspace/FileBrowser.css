@@ -92,6 +92,28 @@
   letter-spacing: 0.01em;
 }
 
+.fb-row-pick {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: inherit;
+  min-width: 0;
+}
+
+.fb-action-crosslink {
+  color: var(--phosphor-500);
+}
+
+.fb-action-crosslink:hover {
+  color: var(--phosphor-400);
+}
+
 .fb-name-link {
   background: transparent;
   border: none;

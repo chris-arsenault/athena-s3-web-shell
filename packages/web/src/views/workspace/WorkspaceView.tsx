@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import type { DatasetFileType, S3Object } from "@athena-shell/shared";
 
@@ -24,6 +25,22 @@ import { useUploads } from "./useUploads";
 import "./WorkspaceView.css";
 
 const WORKSPACE_PREFIX_KEY = "workspacePrefix";
+
+function useUrlPrefixOverride(
+  params: URLSearchParams,
+  root: string | undefined,
+  setPrefix: (p: string) => void
+): void {
+  // Reading once per params change is fine — SchemaTree → Workspace
+  // crosslinks navigate by updating the URL, which bumps params.
+  useEffect(() => {
+    if (!root) return;
+    const urlPrefix = params.get("prefix");
+    if (urlPrefix && urlPrefix.startsWith(root)) {
+      setPrefix(urlPrefix);
+    }
+  }, [params, root, setPrefix]);
+}
 
 function usePersistedPrefix(
   root: string | undefined,
@@ -57,12 +74,14 @@ interface RegisterTarget {
 export function WorkspaceView() {
   const { provider, context, loading } = useAuth();
   const [prefix, setPrefix] = useState<string>("");
+  const [params] = useSearchParams();
   const { listing, error, setError, refresh } = useFileListing(provider, context, prefix);
   const [registering, setRegistering] = useState<RegisterTarget | null>(null);
   const [previewing, setPreviewing] = useState<S3Object | null>(null);
   const uploads = useUploads({ provider, context, prefix, onComplete: refresh });
 
   usePersistedPrefix(context?.s3.prefix, prefix, setPrefix);
+  useUrlPrefixOverride(params, context?.s3.prefix, setPrefix);
 
   const onCreateFolder = useCallback(
     async (name: string) => {
