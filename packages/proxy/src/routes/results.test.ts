@@ -35,6 +35,15 @@ vi.mock("../aws/s3Client.js", () => ({
   }),
 }));
 
+vi.mock("../services/resultsService.js", () => ({
+  parseS3Url: (url: string) => {
+    const m = /^s3:\/\/([^/]+)\/(.+)$/.exec(url);
+    if (!m) throw new Error(`bad s3 url: ${url}`);
+    return { bucket: m[1], key: m[2] };
+  },
+  presignResultsDownload: async () => "https://example.invalid/presigned?sig=fake",
+}));
+
 const { resultsRouter } = await import("./results.js");
 const { loadConfig } = await import("../config.js");
 
@@ -96,5 +105,13 @@ describe("results save-to-workspace route", () => {
       .send({ targetKey: "users/alice/out.csv", includeSqlSidecar: false });
     expect(res.status).toBe(200);
     expect(res.body.sidecarKey).toBeUndefined();
+  });
+});
+
+describe("results /:id/results-url route", () => {
+  it("returns a presigned URL (distinct audit event from /download)", async () => {
+    const res = await request(app()).get("/query/exec-xyz/results-url");
+    expect(res.status).toBe(200);
+    expect(typeof res.body.url).toBe("string");
   });
 });

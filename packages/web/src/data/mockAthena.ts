@@ -243,6 +243,20 @@ export const mockAthena = {
     if (!detail) throw new Error(`No such table ${key}`);
     return detail;
   },
+  async fetchAllResultsDirect(
+    id: string,
+    firstPage: QueryResultPage
+  ): Promise<QueryResultPage> {
+    const e = executions.get(id);
+    if (!e) throw new Error(`No execution ${id}`);
+    // Mock path mirrors the real path's contract: one-shot return of
+    // the full result set, columns from the caller's first page.
+    return {
+      columns: firstPage.columns,
+      rows: e.results.rows,
+      nextToken: undefined,
+    };
+  },
   async startQuery(sql: string, database?: string): Promise<{ executionId: string }> {
     const id = `mock-${Math.random().toString(36).slice(2, 10)}`;
     const now = new Date().toISOString();

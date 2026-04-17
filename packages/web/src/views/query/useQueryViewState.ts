@@ -3,7 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 import type { QueryResultPage } from "@athena-shell/shared";
 
 import type { AuthProvider } from "../../auth/AuthProvider";
-import { getResults } from "../../data/queryRepo";
+import { fetchAllResultsDirect, getResults } from "../../data/queryRepo";
 import { splitStatements, statementAtOffset } from "./splitStatements";
 import { useRunQueue, type QueueItem } from "./useRunQueue";
 
@@ -133,12 +133,22 @@ async function loadMore(args: LoadMoreArgs): Promise<void> {
   if (!execId || !token || !base) return;
   setLoadingMore(true);
   try {
-    const next = await getResults(provider, execId, token);
-    setPaginatedResults({
-      columns: base.columns,
-      rows: [...base.rows, ...next.rows],
-      nextToken: next.nextToken,
-    });
+    // First "load more" click: switch to direct-from-S3 fetch to pull
+    // the full result set in one shot (bypasses GetQueryResults's 1k
+    // page size — typically 50-100× faster for bulk reads). Subsequent
+    // paginatedResults will have no nextToken so this branch only runs
+    // once per execution.
+    const full = await fetchAllResultsDirect(provider, execId, base);
+    if (full) {
+      setPaginatedResults(full);
+    } else {
+      const next = await getResults(provider, execId, token);
+      setPaginatedResults({
+        columns: base.columns,
+        rows: [...base.rows, ...next.rows],
+        nextToken: next.nextToken,
+      });
+    }
   } finally {
     setLoadingMore(false);
   }

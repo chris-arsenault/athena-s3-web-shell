@@ -36,6 +36,23 @@ export function resultsRouter(config: ProxyConfig): Router {
     })
   );
 
+  r.get(
+    "/:id/results-url",
+    asyncHandler(async (req, res) => {
+      const status = await getQuery(athena, req.params.id!);
+      if (!status.outputLocation) {
+        res.status(404).json({ error: { message: "Query has no output location yet" } });
+        return;
+      }
+      const url = await presignResultsDownload(s3, status.outputLocation);
+      audit.queryS3ResultsFetch(req, {
+        executionId: req.params.id!,
+        outputLocation: status.outputLocation,
+      });
+      res.json({ url });
+    })
+  );
+
   r.post(
     "/:id/save-to-workspace",
     asyncHandler(async (req, res) => {

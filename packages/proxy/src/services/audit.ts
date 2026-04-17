@@ -204,6 +204,18 @@ function datasetsCreateTable(
   });
 }
 
+function queryS3ResultsFetch(
+  req: Request,
+  attrs: { executionId: string; outputLocation: string }
+): void {
+  logger.info({
+    ...envelope(req, "query.s3_results_fetch"),
+    executionId: attrs.executionId,
+    outputLocation: attrs.outputLocation,
+    outcome: "ok",
+  });
+}
+
 function querySaveToWorkspace(
   req: Request,
   attrs: {
@@ -227,6 +239,7 @@ export const audit = {
   queryStop,
   queryResults,
   queryDownload,
+  queryS3ResultsFetch,
   querySaveToWorkspace,
   datasetsInfer,
   datasetsCreateTable,
