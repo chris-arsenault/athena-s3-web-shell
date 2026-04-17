@@ -90,23 +90,121 @@ test("a small ▶ peek button on each table row runs the same SELECT * LIMIT 10"
   ).toBeVisible({ timeout: 8_000 });
 });
 
-test("CreateTable copies the source file into a per-table subdir under <prefix>/datasets/", async ({
+test("modal auto-overrides risky columns to STRING on open (stricter-parse heuristic)", async ({
+  page,
+}) => {
+  await freshPage(page, "/workspace");
+  await page
+    .locator(".fb-folder")
+    .filter({ hasText: /sample-data\// })
+    .click();
+  const csvRow = page
+    .locator(".fb-row.fb-file")
+    .filter({ hasText: "dirty-orders.csv" });
+  await csvRow.getByRole("button", { name: /table/i }).click();
+
+  const modal = page.getByTestId("ct-modal");
+  await expect(modal).toBeVisible();
+
+  // subscription_date has a regex-valid-but-invalid row (2024-00-31),
+  // amount has a value past MAX_SAFE_INTEGER. Both should be pre-flipped
+  // to STRING on modal open.
+  const subRow = modal.locator(".ct-col-row").filter({ hasText: /subscription_date/ });
+  const amtRow = modal.locator(".ct-col-row").filter({ hasText: /amount/ });
+  await expect(subRow).toHaveClass(/ct-col-overridden/);
+  await expect(amtRow).toHaveClass(/ct-col-overridden/);
+
+  // order_id is safe (small integers) and stays as its inferred type.
+  const idRow = modal.locator(".ct-col-row").filter({ hasText: /order_id/ });
+  await expect(idRow).not.toHaveClass(/ct-col-overridden/);
+
+  // Create lands a raw_* table AND a companion view (since overrides > 0).
+  await modal.getByRole("button", { name: /create table|create anyway/i }).click();
+  await expect(modal).toBeHidden({ timeout: 15_000 });
+
+  // Navigate to /query; both the view and raw table should exist.
+  await page.getByTestId("nav-link-query").click();
+  await expect(
+    page.getByTestId("tree-tbl-workspace_dev_user-dirty_orders")
+  ).toBeVisible({ timeout: 10_000 });
+  await expect(
+    page.getByTestId("tree-tbl-workspace_dev_user-raw_dirty_orders")
+  ).toBeVisible();
+});
+
+test("duplicate-table: re-registering at the same dataset path hard-blocks and offers Replace existing", async ({
   page,
 }) => {
   await registerTableFromSalesCsv(page);
 
-  // Verify the copied CSV exists at <prefix>/datasets/<table>/.
-  // Navigate from the workspace root; don't page.goto (would reset
-  // the mock S3 state that holds the copy).
+  // Now sales-2025.csv lives at /datasets/sales_2025/.
+  // Navigate there and click ⊞ on the file — same table name, same
+  // location, should block.
   await page.getByTestId("nav-link-workspace").click();
   await page.locator(".crumb-root").click();
   await page
     .locator(".fb-folder")
     .filter({ hasText: /datasets\// })
     .click();
+  await page
+    .locator(".fb-folder")
+    .filter({ hasText: /sales_2025\// })
+    .click();
+  const csvRow = page
+    .locator(".fb-row.fb-file")
+    .filter({ hasText: "sales-2025.csv" });
+  await csvRow.getByRole("button", { name: /table/i }).click();
+
+  const modal = page.getByTestId("ct-modal");
+  await expect(modal).toBeVisible();
+
+  // Primary button is disabled/blocked until the user accepts the replace.
+  const primary = modal.locator("button.btn-primary, button.btn-warn");
+  await expect(primary).toHaveText(/blocked/i, { timeout: 5_000 });
+
+  // Flip the "replace existing" checkbox in the findings panel.
+  await modal.getByRole("checkbox", { name: /replace existing/i }).check();
+
+  // Now the primary button is actionable (green "create table" since no
+  // advisory findings remain).
+  await expect(primary).toHaveText(/create table|create anyway/i);
+  await primary.click();
+
+  await expect(modal).toBeHidden({ timeout: 15_000 });
+
+  // The table still exists under the same name — DROP + CREATE landed.
+  await page.getByTestId("nav-link-query").click();
   await expect(
-    page.locator(".fb-folder").filter({ hasText: /sales_2025\// })
-  ).toBeVisible();
+    page.getByTestId("tree-tbl-workspace_dev_user-sales_2025")
+  ).toBeVisible({ timeout: 10_000 });
+});
+
+test("CreateTable moves the source file into a per-table subdir under <prefix>/datasets/ (source gone)", async ({
+  page,
+}) => {
+  await registerTableFromSalesCsv(page);
+
+  // Navigate from the workspace root; don't page.goto (would reset
+  // the mock S3 state that carries the move result).
+  await page.getByTestId("nav-link-workspace").click();
+  await page.locator(".crumb-root").click();
+
+  // sample-data/ is still a folder (customers.csv remains); enter it.
+  await page
+    .locator(".fb-folder")
+    .filter({ hasText: /sample-data\// })
+    .click();
+  // sales-2025.csv should NOT be here any more — the move removed it.
+  await expect(
+    page.locator(".fb-row.fb-file").filter({ hasText: "sales-2025.csv" })
+  ).toHaveCount(0);
+
+  // And it DOES live under /datasets/sales_2025/.
+  await page.locator(".crumb-root").click();
+  await page
+    .locator(".fb-folder")
+    .filter({ hasText: /datasets\// })
+    .click();
   await page
     .locator(".fb-folder")
     .filter({ hasText: /sales_2025\// })

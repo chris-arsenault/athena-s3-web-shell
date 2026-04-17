@@ -48,6 +48,35 @@ const TABLES: Record<string, TableRef[]> = {
 };
 
 /**
+ * Look up any table in the mock catalog whose LOCATION matches the given
+ * S3 URL. Used by mockDatasets.analyze to detect duplicate-table
+ * findings in demo mode.
+ */
+export function findMockTableByLocation(location: string): TableRef | null {
+  const normalized = location.endsWith("/") ? location : `${location}/`;
+  for (const db of Object.keys(TABLES)) {
+    for (const t of TABLES[db] ?? []) {
+      if (!t.location) continue;
+      const loc = t.location.endsWith("/") ? t.location : `${t.location}/`;
+      if (loc === normalized) return t;
+    }
+  }
+  return null;
+}
+
+/**
+ * Drop a table from the mock catalog. Mirrors DROP TABLE in mock mode
+ * so the "Replace existing table" flow has somewhere to land.
+ */
+export function dropMockTable(database: string, table: string): void {
+  const bucket = TABLES[database];
+  if (!bucket) return;
+  const idx = bucket.findIndex((t) => t.name === table);
+  if (idx >= 0) bucket.splice(idx, 1);
+  delete TABLE_DETAILS[`${database}.${table}`];
+}
+
+/**
  * Adds a user-created table to the mock catalog AND seeds an execution
  * record for the DDL so the SPA's polling loop sees a SUCCEEDED state.
  */

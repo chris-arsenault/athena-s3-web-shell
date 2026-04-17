@@ -1,0 +1,87 @@
+.ct-findings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding: var(--s-2);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+
+.ct-findings-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+}
+
+.ct-findings-empty {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: 0.85rem;
+}
+
+.ct-findings-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.ct-finding {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-1) var(--s-2);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  font-size: 0.85rem;
+}
+
+.ct-finding-block {
+  border-left: 2px solid var(--color-danger, var(--crimson-500));
+}
+
+.ct-finding-advisory {
+  border-left: 2px solid var(--color-warn, var(--amber-400));
+}
+
+.ct-finding-msg {
+  flex: 1;
+  min-width: 0;
+}
+
+.ct-finding-col {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: var(--s-1);
+}
+
+.ct-finding-cmd {
+  background: var(--color-surface);
+  padding: var(--s-1) var(--s-2);
+  border: 1px dashed var(--color-border);
+  font-size: 0.8rem;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.ct-finding-action {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+  cursor: pointer;
+}
+
+.btn-small {
+  font-size: 0.8rem;
+  padding: var(--s-0) var(--s-1);
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px dashed var(--color-border);
+}

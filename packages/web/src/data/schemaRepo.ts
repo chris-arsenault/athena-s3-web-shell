@@ -3,14 +3,11 @@ import type { DatabaseRef, Page, TableDetail, TableRef } from "@athena-shell/sha
 import type { AuthProvider } from "../auth/AuthProvider";
 import { apiGet } from "./api";
 import { mockAthena } from "./mockAthena";
-
-async function authHeader(provider: AuthProvider) {
-  return provider.getProxyAuthHeader();
-}
+import { proxyHeaders } from "./proxyHeaders";
 
 export async function listDatabases(provider: AuthProvider): Promise<Page<DatabaseRef>> {
   if (provider.isMock()) return mockAthena.listDatabases();
-  return apiGet("/schema/databases", { authHeader: await authHeader(provider) });
+  return apiGet("/schema/databases", { ...(await proxyHeaders(provider)) });
 }
 
 export async function listTables(
@@ -19,7 +16,7 @@ export async function listTables(
 ): Promise<Page<TableRef>> {
   if (provider.isMock()) return mockAthena.listTables(database);
   return apiGet(`/schema/databases/${encodeURIComponent(database)}/tables`, {
-    authHeader: await authHeader(provider),
+    ...(await proxyHeaders(provider)),
   });
 }
 
@@ -31,6 +28,6 @@ export async function getTable(
   if (provider.isMock()) return mockAthena.getTable(database, table);
   return apiGet(
     `/schema/databases/${encodeURIComponent(database)}/tables/${encodeURIComponent(table)}`,
-    { authHeader: await authHeader(provider) }
+    { ...(await proxyHeaders(provider)) }
   );
 }

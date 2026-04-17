@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 
 import { createAthenaClient } from "../aws/athenaClient.js";
 import type { ProxyConfig } from "../config.js";
@@ -15,7 +15,7 @@ const SQL_MAX = 64_000;
 
 export function savedQueriesRouter(config: ProxyConfig): Router {
   const r = Router();
-  const athena = createAthenaClient(config);
+  const athena = (req: Request) => createAthenaClient(config, req.awsCredentials);
 
   r.post(
     "/",
@@ -26,7 +26,7 @@ export function savedQueriesRouter(config: ProxyConfig): Router {
         return;
       }
       const { name, description, sql, database } = validation.value!;
-      const out = await createSavedQuery(athena, req.user!.athena, {
+      const out = await createSavedQuery(athena(req), req.user!.athena, {
         name,
         description,
         sql,
@@ -39,7 +39,7 @@ export function savedQueriesRouter(config: ProxyConfig): Router {
   r.get(
     "/",
     asyncHandler(async (req, res) => {
-      const page = await listSavedQueries(athena, req.user!.athena);
+      const page = await listSavedQueries(athena(req), req.user!.athena);
       res.json(page);
     })
   );
@@ -47,7 +47,7 @@ export function savedQueriesRouter(config: ProxyConfig): Router {
   r.delete(
     "/:id",
     asyncHandler(async (req, res) => {
-      await deleteSavedQuery(athena, req.params.id!);
+      await deleteSavedQuery(athena(req), req.params.id!);
       res.json({ ok: true });
     })
   );

@@ -1,4 +1,10 @@
-import { API_BASE } from "@athena-shell/shared";
+import {
+  API_BASE,
+  AWS_ACCESS_KEY_HEADER,
+  AWS_SECRET_KEY_HEADER,
+  AWS_SESSION_TOKEN_HEADER,
+  type AwsTempCredentials,
+} from "@athena-shell/shared";
 
 export class ApiError extends Error {
   constructor(
@@ -19,6 +25,9 @@ export interface AuthHeader {
 export interface ApiOptions {
   signal?: AbortSignal;
   authHeader?: AuthHeader | null;
+  /** Per-user STS credentials — the proxy passes these through to the AWS
+   *  SDK so Athena/Glue calls run under the caller's own IAM role. */
+  awsCredentials?: AwsTempCredentials | null;
   query?: Record<string, string | number | undefined>;
 }
 
@@ -40,6 +49,11 @@ async function request<T>(
 ): Promise<T> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (opts.authHeader) headers[opts.authHeader.name] = opts.authHeader.value;
+  if (opts.awsCredentials) {
+    headers[AWS_ACCESS_KEY_HEADER] = opts.awsCredentials.accessKeyId;
+    headers[AWS_SECRET_KEY_HEADER] = opts.awsCredentials.secretAccessKey;
+    headers[AWS_SESSION_TOKEN_HEADER] = opts.awsCredentials.sessionToken;
+  }
 
   const res = await fetch(buildUrl(path, opts.query), {
     method,

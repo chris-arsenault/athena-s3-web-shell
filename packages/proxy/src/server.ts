@@ -4,6 +4,7 @@ import morgan from "morgan";
 import type { ProxyConfig } from "./config.js";
 import { authenticate } from "./middleware/authenticate.js";
 import { errorHandler } from "./middleware/errorHandler.js";
+import { passthroughCredentials } from "./middleware/passthroughCredentials.js";
 import { requestId } from "./middleware/requestId.js";
 import { datasetsRouter } from "./routes/datasets.js";
 import { healthRouter } from "./routes/health.js";
@@ -39,7 +40,12 @@ export function createServer(config: ProxyConfig): express.Express {
 
   const apiAuth = express.Router();
   apiAuth.use(authenticate(config));
+  // /session is the first call on page load — the SPA fetches it
+  // before it has minted STS credentials from the Identity Pool, so
+  // it must NOT require the passthrough headers (the route doesn't
+  // hit AWS anyway, it just echoes the JWT-derived AuthContext).
   apiAuth.use("/session", sessionRouter());
+  apiAuth.use(passthroughCredentials(config));
   apiAuth.use("/schema", schemaRouter(config));
   apiAuth.use("/query", queryRouter(config));
   apiAuth.use("/query", resultsRouter(config));

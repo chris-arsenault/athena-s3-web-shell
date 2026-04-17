@@ -1,0 +1,15 @@
+.ct-loc {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding: var(--s-2);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+
+.ct-loc-summary {
+  font-size: 0.85rem;
+  padding-top: var(--s-1);
+  border-top: 1px dashed var(--color-border);
+  margin-top: var(--s-1);
+}

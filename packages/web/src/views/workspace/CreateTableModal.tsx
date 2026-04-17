@@ -1,20 +1,27 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
-import {
-  QUERY_POLL_INTERVAL_MS,
-  type AuthContext,
-  type DatasetColumn,
-  type DatasetFileType,
-  type S3Object,
+import type {
+  AnalyzeResponse,
+  DatasetColumn,
+  DatasetFileType,
+  Finding,
+  S3Object,
 } from "@athena-shell/shared";
 
-import type { AuthProvider } from "../../auth/AuthProvider";
 import { useAuth } from "../../auth/authContext";
-import { createTable, inferSchema } from "../../data/datasetsRepo";
-import { getQuery } from "../../data/queryRepo";
-import { copyObject } from "../../data/s3Repo";
 import { useSchema } from "../../data/schemaContext";
+import {
+  narrowColumnIndices,
+  runCreate,
+  toggleOverride,
+  type ButtonMode,
+} from "./createTableActions";
+import { FindingsPanel, type ResolveState } from "./FindingsPanel";
+import "./FindingsPanel.css";
+import { LocationSection } from "./LocationSection";
+import "./LocationSection.css";
 import "./CreateTableModal.css";
+import { useCreateTableState } from "./useCreateTableState";
 
 interface Props {
   file: S3Object;
@@ -23,120 +30,89 @@ interface Props {
   onCreated: () => void;
 }
 
-export function CreateTableModal({ file, fileType, onClose, onCreated }: Props) {
+export function CreateTableModal(props: Props) {
   const { provider, context } = useAuth();
   const schema = useSchema();
-  const [columns, setColumns] = useState<DatasetColumn[]>([]);
-  const [tableName, setTableName] = useState(() => defaultTableName(file.name));
-  const [inferring, setInferring] = useState(true);
-  const [creating, setCreating] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-
-  useEffect(() => {
-    if (!context) return;
-    return runInfer(provider, context, file, fileType, setColumns, setError, setInferring);
-  }, [provider, context, file, fileType]);
+  const s = useCreateTableState(provider, context ?? null, props.file, props.fileType);
 
   useEffect(() => {
     const handle = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !creating) onClose();
+      if (e.key === "Escape" && !s.creating) props.onClose();
     };
     window.addEventListener("keydown", handle);
     return () => window.removeEventListener("keydown", handle);
-  }, [creating, onClose]);
+  }, [s.creating, props]);
 
   if (!context) return null;
   const database = context.athena.userDatabase ?? "workspace_unknown";
-  // Each table gets its own isolated subdir under <prefix>/datasets/.
-  // Athena's LOCATION is a directory and reads EVERY file in it — if we
-  // pointed at the source file's parent we'd read sibling files too
-  // (e.g. a CSV table choking on a neighbor .json). The modal preview
-  // shows the final isolated location so there's no surprise.
-  const tableDir = `datasets/${sanitizeDirSlug(tableName)}/`;
-  const location = `s3://${context.s3.bucket}/${context.s3.prefix}${tableDir}`;
 
-  const onCreate = () =>
+  const onCreate = () => {
+    if (!s.analyze || !s.effectiveLocation) return;
     runCreate({
       provider,
       context,
-      file,
-      fileType,
+      file: props.file,
+      analyze: s.analyze,
+      location: s.effectiveLocation,
+      tableName: s.tableName,
+      state: s.state,
       database,
-      table: tableName,
-      columns,
-      tableDir,
-      location,
+      fileType: props.fileType,
       schema,
-      setCreating,
-      setError,
-      onCreated,
+      setCreating: s.setCreating,
+      setError: s.setError,
+      onCreated: props.onCreated,
     });
+  };
 
   return (
     <div className="ct-backdrop">
       <div className="ct-modal reg" role="dialog" aria-modal="true" data-testid="ct-modal">
-        <ModalHeader onClose={onClose} disabled={creating} />
-        <ModalMeta
-          file={file}
+        <ModalHeader onClose={props.onClose} disabled={s.creating} />
+        <MetaHeader
+          file={props.file}
           database={database}
-          location={location}
-          tableName={tableName}
-          setTableName={setTableName}
-          disabled={creating}
+          tableName={s.tableName}
+          setTableName={s.setTableName}
+          creating={s.creating}
         />
-        <SchemaSection
-          inferring={inferring}
-          columns={columns}
-          onChange={setColumns}
-          disabled={creating}
-        />
-        {error && <ErrorBlock message={error.message} />}
+        {s.analyzing && <AnalyzingRow />}
+        {!s.analyzing && s.analyze && s.effectiveLocation && (
+          <ReviewBody
+            analyze={s.analyze}
+            effectiveLocation={s.effectiveLocation}
+            file={props.file}
+            state={s.state}
+            setState={s.setState}
+            columnIndexByName={s.columnIndexByName}
+            creating={s.creating}
+          />
+        )}
+        {s.error && <ErrorBlock message={s.error.message} />}
         <ModalFoot
-          onClose={onClose}
+          onClose={props.onClose}
           onCreate={onCreate}
-          creating={creating}
-          inferring={inferring}
-          disabled={columns.length === 0 || !tableName.trim()}
+          mode={s.buttonMode}
+          creating={s.creating}
+          disabled={isFootDisabled(s)}
         />
       </div>
     </div>
   );
 }
 
-function runInfer(
-  provider: AuthProvider,
-  context: AuthContext,
-  file: S3Object,
-  fileType: DatasetFileType,
-  setColumns: (c: DatasetColumn[]) => void,
-  setError: (e: Error | null) => void,
-  setInferring: (b: boolean) => void
-): () => void {
-  let cancelled = false;
-  (async () => {
-    try {
-      const resp = await inferSchema(provider, {
-        bucket: context.s3.bucket,
-        key: file.key,
-        fileType,
-      });
-      if (cancelled) return;
-      setColumns(
-        resp.columns.length > 0 ? resp.columns : [{ name: "col_1", type: "string" }]
-      );
-    } catch (e) {
-      if (!cancelled) setError(e as Error);
-    } finally {
-      if (!cancelled) setInferring(false);
-    }
-  })();
-  return () => {
-    cancelled = true;
-  };
+function isFootDisabled(s: ReturnType<typeof useCreateTableState>): boolean {
+  return (
+    s.analyzing ||
+    !s.analyze ||
+    !s.effectiveLocation ||
+    s.buttonMode === "blocked" ||
+    s.tableName.trim().length === 0
+  );
 }
 
 // ---------------------------------------------------------------------------
-// Modal subsections
+// Subcomponents
 
 function ModalHeader({ onClose, disabled }: { onClose: () => void; disabled: boolean }) {
   return (
@@ -150,20 +126,22 @@ function ModalHeader({ onClose, disabled }: { onClose: () => void; disabled: boo
   );
 }
 
-interface MetaProps {
+function MetaHeader({
+  file,
+  database,
+  tableName,
+  setTableName,
+  creating,
+}: {
   file: S3Object;
   database: string;
-  location: string;
   tableName: string;
-  setTableName: (s: string) => void;
-  disabled: boolean;
-}
-
-function ModalMeta({ file, database, location, tableName, setTableName, disabled }: MetaProps) {
+  setTableName: (v: string) => void;
+  creating: boolean;
+}) {
   return (
     <div className="ct-meta">
       <MetaRow label="source" value={file.name} />
-      <MetaRow label="location" value={location} />
       <MetaRow label="database" value={database} />
       <div className="ct-meta-row">
         <span className="tracked">table</span>
@@ -171,10 +149,79 @@ function ModalMeta({ file, database, location, tableName, setTableName, disabled
           className="input ct-table-input"
           value={tableName}
           onChange={(e) => setTableName(e.target.value)}
-          disabled={disabled}
+          disabled={creating}
         />
       </div>
     </div>
+  );
+}
+
+function AnalyzingRow() {
+  return (
+    <div className="ct-inferring mono">
+      <span className="dot" aria-hidden /> analyzing sample…
+    </div>
+  );
+}
+
+interface ReviewBodyProps {
+  analyze: AnalyzeResponse;
+  effectiveLocation: AnalyzeResponse["location"];
+  file: S3Object;
+  state: ResolveState;
+  setState: React.Dispatch<React.SetStateAction<ResolveState>>;
+  columnIndexByName: Record<string, number>;
+  creating: boolean;
+}
+
+function ReviewBody({
+  analyze,
+  effectiveLocation,
+  file,
+  state,
+  setState,
+  columnIndexByName,
+  creating,
+}: ReviewBodyProps) {
+  return (
+    <>
+      <LocationSection file={file} location={effectiveLocation} />
+      <SchemaEditor
+        columns={analyze.columns}
+        overrides={state.stringOverrides}
+        onToggleOverride={(i) => toggleOverride(setState, i)}
+        disabled={creating}
+      />
+      <FindingsPanel
+        findings={analyze.findings}
+        columnIndexByName={columnIndexByName}
+        state={state}
+        onReplaceExistingToggle={(next) =>
+          setState((ps) => ({ ...ps, replaceExisting: next }))
+        }
+        onOverrideColumn={(i) => toggleOverride(setState, i, true)}
+        onAcceptNullFormat={(token) =>
+          setState((ps) => ({ ...ps, acceptedNullFormat: token }))
+        }
+        onAcceptSerdeSwap={() => {
+          // OpenCSVSerde can't natively store DATE/TIMESTAMP/BIGINT/DOUBLE
+          // — force every non-string column to STRING on swap so the DDL
+          // doesn't land with a definition Athena will choke on.
+          const forced = narrowColumnIndices(analyze.columns);
+          setState((ps) => ({
+            ...ps,
+            acceptedSerdeSwap: true,
+            stringOverrides: new Set([...ps.stringOverrides, ...forced]),
+          }));
+        }}
+        onDismiss={(k) =>
+          setState((ps) => ({
+            ...ps,
+            dismissedAdvisoryKeys: new Set([...ps.dismissedAdvisoryKeys, k]),
+          }))
+        }
+      />
+    </>
   );
 }
 
@@ -187,68 +234,63 @@ function MetaRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-interface SchemaSectionProps {
-  inferring: boolean;
+interface SchemaEditorProps {
   columns: DatasetColumn[];
-  onChange: (next: DatasetColumn[]) => void;
+  overrides: Set<number>;
+  onToggleOverride: (idx: number) => void;
   disabled: boolean;
 }
 
-function SchemaSection({ inferring, columns, onChange, disabled }: SchemaSectionProps) {
+function SchemaEditor({ columns, overrides, onToggleOverride, disabled }: SchemaEditorProps) {
   return (
     <div className="ct-schema">
       <div className="ct-schema-head">
         <span className="tracked">schema</span>
         <span className="text-dim mono">{columns.length} columns</span>
       </div>
-      {inferring ? (
-        <div className="ct-schema-inferring mono">
-          <span className="dot" aria-hidden /> inferring from sample…
-        </div>
-      ) : (
-        <ColumnEditor columns={columns} onChange={onChange} disabled={disabled} />
-      )}
+      <ul className="ct-cols">
+        {columns.map((col, idx) => (
+          <SchemaRow
+            key={idx}
+            idx={idx}
+            col={col}
+            overridden={overrides.has(idx)}
+            onToggle={() => onToggleOverride(idx)}
+            disabled={disabled}
+          />
+        ))}
+      </ul>
+      <div className="ct-schema-foot text-muted mono">
+        overridden columns get a companion view wrapping TRY_CAST so queries see the original type
+      </div>
     </div>
   );
 }
 
-interface ColumnEditorProps {
-  columns: DatasetColumn[];
-  onChange: (next: DatasetColumn[]) => void;
+function SchemaRow({
+  idx,
+  col,
+  overridden,
+  onToggle,
+  disabled,
+}: {
+  idx: number;
+  col: DatasetColumn;
+  overridden: boolean;
+  onToggle: () => void;
   disabled: boolean;
-}
-
-function ColumnEditor({ columns, onChange, disabled }: ColumnEditorProps) {
-  const update = (idx: number, patch: Partial<DatasetColumn>) =>
-    onChange(columns.map((c, i) => (i === idx ? { ...c, ...patch } : c)));
+}) {
   return (
-    <ul className="ct-cols">
-      {columns.map((col, idx) => (
-        <li key={idx} className="ct-col-row">
-          <span className="ct-col-idx mono tnum">
-            {String(idx + 1).padStart(2, "0")}
-          </span>
-          <input
-            className="input ct-col-name"
-            value={col.name}
-            onChange={(e) => update(idx, { name: e.target.value })}
-            disabled={disabled}
-          />
-          <select
-            className="input ct-col-type"
-            value={col.type.replace(/\(.*/, "")}
-            onChange={(e) => update(idx, { type: e.target.value })}
-            disabled={disabled}
-          >
-            {TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </li>
-      ))}
-    </ul>
+    <li className={`ct-col-row ${overridden ? "ct-col-overridden" : ""}`}>
+      <span className="ct-col-idx mono tnum">{String(idx + 1).padStart(2, "0")}</span>
+      <span className="ct-col-name mono">{col.name}</span>
+      <span className="ct-col-type mono">
+        {overridden ? `string (was ${col.type})` : col.type}
+      </span>
+      <button className="btn btn-small" onClick={onToggle} disabled={disabled}>
+        {overridden ? "restore" : "→ STRING"}
+      </button>
+    </li>
   );
 }
 
@@ -264,120 +306,34 @@ function ErrorBlock({ message }: { message: string }) {
 interface FootProps {
   onClose: () => void;
   onCreate: () => void;
+  mode: ButtonMode;
   creating: boolean;
-  inferring: boolean;
   disabled: boolean;
 }
 
-function ModalFoot({ onClose, onCreate, creating, inferring, disabled }: FootProps) {
+function ModalFoot({ onClose, onCreate, mode, creating, disabled }: FootProps) {
+  const label = creating
+    ? "creating…"
+    : mode === "blocked"
+      ? "blocked"
+      : mode === "advisory"
+        ? "create anyway"
+        : "create table";
   return (
     <div className="ct-foot flex-row gap-2">
       <button className="btn" onClick={onClose} disabled={creating}>
         cancel
       </button>
       <button
-        className="btn btn-primary ml-auto"
+        className={`btn ${mode === "advisory" ? "btn-warn" : "btn-primary"} ml-auto`}
         onClick={onCreate}
-        disabled={creating || inferring || disabled}
+        disabled={creating || disabled}
       >
-        {creating ? "creating…" : "create table"}
+        {label}
       </button>
     </div>
   );
 }
 
-const TYPES = [
-  "string",
-  "bigint",
-  "int",
-  "double",
-  "decimal",
-  "boolean",
-  "date",
-  "timestamp",
-];
-
-interface RunCreateArgs {
-  provider: AuthProvider;
-  context: AuthContext;
-  file: S3Object;
-  fileType: DatasetFileType;
-  database: string;
-  table: string;
-  columns: DatasetColumn[];
-  tableDir: string;
-  location: string;
-  schema: ReturnType<typeof useSchema>;
-  setCreating: (b: boolean) => void;
-  setError: (e: Error | null) => void;
-  onCreated: () => void;
-}
-
-async function runCreate(args: RunCreateArgs): Promise<void> {
-  const {
-    provider,
-    context,
-    file,
-    fileType,
-    database,
-    table,
-    columns,
-    tableDir,
-    location,
-    schema,
-    setCreating,
-    setError,
-    onCreated,
-  } = args;
-  setError(null);
-  setCreating(true);
-  try {
-    const targetKey = `${context.s3.prefix}${tableDir}${file.name}`;
-    if (file.key !== targetKey) {
-      await copyObject(provider, context, file.key, targetKey);
-    }
-    const { executionId } = await createTable(provider, {
-      database,
-      table,
-      location,
-      fileType,
-      columns,
-      skipHeader: true,
-    });
-    await pollDdl(provider, executionId);
-    await schema.refresh();
-    onCreated();
-  } catch (e) {
-    setError(e as Error);
-  } finally {
-    setCreating(false);
-  }
-}
-
-async function pollDdl(provider: AuthProvider, executionId: string): Promise<void> {
-  const deadline = Date.now() + 60_000;
-  for (;;) {
-    const status = await getQuery(provider, executionId);
-    if (status.state === "SUCCEEDED") return;
-    if (status.state === "FAILED" || status.state === "CANCELLED") {
-      throw new Error(status.stateChangeReason ?? `Table creation ${status.state}`);
-    }
-    if (Date.now() > deadline) {
-      throw new Error("Timed out waiting for table creation");
-    }
-    await new Promise((r) => setTimeout(r, QUERY_POLL_INTERVAL_MS));
-  }
-}
-
-function defaultTableName(fileName: string): string {
-  const stem = fileName.replace(/\.[^.]+$/, "");
-  const cleaned = stem.toLowerCase().replace(/[^a-z0-9_]/g, "_");
-  if (!cleaned) return "dataset";
-  return /^[0-9]/.test(cleaned) ? `_${cleaned}` : cleaned;
-}
-
-function sanitizeDirSlug(raw: string): string {
-  const slug = raw.toLowerCase().replace(/[^a-z0-9_]/g, "_");
-  if (!slug) return "dataset";
-  return /^[0-9]/.test(slug) ? `_${slug}` : slug;
-}
+// keep Finding exposed for external typing uses
+export type { Finding };

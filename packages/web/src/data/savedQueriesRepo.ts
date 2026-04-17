@@ -7,17 +7,14 @@ import { useAuth } from "../auth/authContext";
 import type { AuthProvider } from "../auth/AuthProvider";
 import { apiDelete, apiGet, apiPost } from "./api";
 import { mockSavedQueries } from "./mockSavedQueries";
-
-async function authHeader(provider: AuthProvider) {
-  return provider.getProxyAuthHeader();
-}
+import { proxyHeaders } from "./proxyHeaders";
 
 export async function listSavedQueries(
   provider: AuthProvider,
   workgroup: string
 ): Promise<SavedQueriesPage> {
   if (provider.isMock()) return mockSavedQueries.list(workgroup);
-  return apiGet("/saved-queries", { authHeader: await authHeader(provider) });
+  return apiGet("/saved-queries", { ...(await proxyHeaders(provider)) });
 }
 
 export async function createSavedQuery(
@@ -28,7 +25,7 @@ export async function createSavedQuery(
   if (provider.isMock()) {
     return mockSavedQueries.create(scope.workgroup, scope.userDatabase, req);
   }
-  return apiPost("/saved-queries", req, { authHeader: await authHeader(provider) });
+  return apiPost("/saved-queries", req, { ...(await proxyHeaders(provider)) });
 }
 
 export async function deleteSavedQuery(
@@ -38,7 +35,7 @@ export async function deleteSavedQuery(
 ): Promise<void> {
   if (provider.isMock()) return mockSavedQueries.delete(workgroup, id);
   await apiDelete(`/saved-queries/${encodeURIComponent(id)}`, {
-    authHeader: await authHeader(provider),
+    ...(await proxyHeaders(provider)),
   });
 }
 

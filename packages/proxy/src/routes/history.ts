@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 
 import { HISTORY_PAGE_SIZE } from "@athena-shell/shared";
 
@@ -9,13 +9,13 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 
 export function historyRouter(config: ProxyConfig): Router {
   const r = Router();
-  const athena = createAthenaClient(config);
+  const athena = (req: Request) => createAthenaClient(config, req.awsCredentials);
 
   r.get(
     "/",
     asyncHandler(async (req, res) => {
       const page = await listHistory(
-        athena,
+        athena(req),
         req.user!.athena.workgroup,
         Number(req.query.pageSize ?? HISTORY_PAGE_SIZE),
         req.query.nextToken as string | undefined

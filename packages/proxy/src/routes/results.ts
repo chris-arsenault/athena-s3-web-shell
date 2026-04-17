@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 
 import type { AuthContext } from "@athena-shell/shared";
 
@@ -16,18 +16,18 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 
 export function resultsRouter(config: ProxyConfig): Router {
   const r = Router();
-  const athena = createAthenaClient(config);
-  const s3 = createS3Client(config);
+  const athena = (req: Request) => createAthenaClient(config, req.awsCredentials);
+  const s3 = (req: Request) => createS3Client(config, req.awsCredentials);
 
   r.get(
     "/:id/download",
     asyncHandler(async (req, res) => {
-      const status = await getQuery(athena, req.params.id!);
+      const status = await getQuery(athena(req), req.params.id!);
       if (!status.outputLocation) {
         res.status(404).json({ error: { message: "Query has no output location yet" } });
         return;
       }
-      const url = await presignResultsDownload(s3, status.outputLocation);
+      const url = await presignResultsDownload(s3(req), status.outputLocation);
       audit.queryDownload(req, {
         executionId: req.params.id!,
         outputLocation: status.outputLocation,
@@ -39,12 +39,12 @@ export function resultsRouter(config: ProxyConfig): Router {
   r.get(
     "/:id/results-url",
     asyncHandler(async (req, res) => {
-      const status = await getQuery(athena, req.params.id!);
+      const status = await getQuery(athena(req), req.params.id!);
       if (!status.outputLocation) {
         res.status(404).json({ error: { message: "Query has no output location yet" } });
         return;
       }
-      const url = await presignResultsDownload(s3, status.outputLocation);
+      const url = await presignResultsDownload(s3(req), status.outputLocation);
       audit.queryS3ResultsFetch(req, {
         executionId: req.params.id!,
         outputLocation: status.outputLocation,
@@ -63,7 +63,12 @@ export function resultsRouter(config: ProxyConfig): Router {
         return;
       }
       try {
-        const out = await copyResultToWorkspace(athena, s3, req.params.id!, parsed.value!);
+        const out = await copyResultToWorkspace(
+          athena(req),
+          s3(req),
+          req.params.id!,
+          parsed.value!
+        );
         audit.querySaveToWorkspace(req, {
           executionId: req.params.id!,
           targetKey: out.targetKey,

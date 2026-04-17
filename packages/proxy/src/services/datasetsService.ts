@@ -3,34 +3,28 @@ import {
   HeadObjectCommand,
   type S3Client,
 } from "@aws-sdk/client-s3";
-import { type AthenaClient } from "@aws-sdk/client-athena";
 import { parquetMetadataAsync } from "hyparquet";
 
 import type {
-  AthenaScope,
-  CreateTableRequest,
-  CreateTableResponse,
   DatasetColumn,
   DatasetFileType,
   InferSchemaResponse,
 } from "@athena-shell/shared";
 
+import { sanitizeIdent } from "./ddlTemplates.js";
 import {
-  createDatabaseDdl,
-  ddlForRequest,
-  sanitizeIdent,
-} from "./ddlTemplates.js";
-import {
+  extractJsonRows,
+  extractJsonlRows,
   inferJsonSchema,
   inferJsonlSchema,
   parquetSchemaToColumns,
 } from "./schemaInference.js";
-import { startQuery, getQuery } from "./queryService.js";
 
-const DEFAULT_SAMPLE_BYTES = 65536;
-const SAMPLE_DATA_ROWS = 50;
-const ENSURE_DB_POLL_INTERVAL_MS = 400;
-const ENSURE_DB_POLL_TIMEOUT_MS = 30_000;
+// Re-exported from createTableService for backward import paths.
+export { createTable, createTableFromPlan } from "./createTableService.js";
+
+export const DEFAULT_SAMPLE_BYTES = 65536;
+export const SAMPLE_DATA_ROWS = 50;
 
 export async function inferSchema(
   s3: S3Client,
@@ -39,25 +33,54 @@ export async function inferSchema(
   fileType: DatasetFileType,
   sampleBytes: number = DEFAULT_SAMPLE_BYTES
 ): Promise<InferSchemaResponse> {
+  if (fileType === "parquet") {
+    const columns = await inferParquetSchema(s3, bucket, key);
+    return { columns, sampleRows: [], hasHeader: false };
+  }
+  const text = await fetchSampleText(s3, bucket, key, sampleBytes);
+  return inferSchemaFromText(text, fileType);
+}
+
+/**
+ * Pure variant — works off already-fetched sample text so callers
+ * (analyzeService) can share one S3 round-trip across inference and
+ * findings detection.
+ */
+export function inferSchemaFromText(
+  text: string,
+  fileType: DatasetFileType
+): InferSchemaResponse {
   if (fileType === "csv" || fileType === "tsv") {
-    const text = await fetchSample(s3, bucket, key, sampleBytes);
     const delimiter = fileType === "tsv" ? "\t" : ",";
     return inferCsvSchema(text, delimiter);
   }
   if (fileType === "jsonl") {
-    const text = await fetchSample(s3, bucket, key, sampleBytes);
-    return { columns: inferJsonlSchema(text, SAMPLE_DATA_ROWS), hasHeader: false };
+    const columns = inferJsonlSchema(text, SAMPLE_DATA_ROWS);
+    const sampleRows = extractJsonlRows(text, columns, SAMPLE_DATA_ROWS);
+    return { columns, sampleRows, hasHeader: false };
   }
   if (fileType === "json") {
-    const text = await fetchSample(s3, bucket, key, sampleBytes);
-    return { columns: inferJsonSchema(text, SAMPLE_DATA_ROWS), hasHeader: false };
+    try {
+      const columns = inferJsonSchema(text, SAMPLE_DATA_ROWS);
+      const sampleRows = extractJsonRows(text, columns, SAMPLE_DATA_ROWS);
+      return { columns, sampleRows, hasHeader: false };
+    } catch {
+      return { columns: [], sampleRows: [], hasHeader: false };
+    }
   }
-  if (fileType === "parquet") {
-    const columns = await inferParquetSchema(s3, bucket, key);
-    return { columns, hasHeader: false };
-  }
-  return { columns: [], hasHeader: false };
+  return { columns: [], sampleRows: [], hasHeader: false };
 }
+
+export async function fetchSampleText(
+  s3: S3Client,
+  bucket: string,
+  key: string,
+  bytes: number
+): Promise<string> {
+  return fetchSample(s3, bucket, key, bytes);
+}
+
+// ----------------------------------------------------------------------------
 
 async function inferParquetSchema(
   s3: S3Client,
@@ -96,20 +119,6 @@ async function getObjectRangeBuffer(
   return arr.buffer.slice(arr.byteOffset, arr.byteOffset + arr.byteLength) as ArrayBuffer;
 }
 
-export async function createTable(
-  athena: AthenaClient,
-  scope: AthenaScope,
-  request: CreateTableRequest
-): Promise<CreateTableResponse> {
-  // Ensure the per-user database exists before issuing the CREATE TABLE.
-  await ensureDatabase(athena, scope, request.database);
-  const sql = ddlForRequest(request);
-  const { executionId } = await startQuery(athena, scope, { sql });
-  return { executionId, database: request.database, table: request.table };
-}
-
-// ----------------------------------------------------------------------------
-
 async function fetchSample(
   s3: S3Client,
   bucket: string,
@@ -130,7 +139,9 @@ async function fetchSample(
 
 function inferCsvSchema(text: string, delimiter: string): InferSchemaResponse {
   const rows = parseCsv(text, delimiter);
-  if (rows.length === 0) return { columns: [], fieldDelimiter: delimiter, hasHeader: false };
+  if (rows.length === 0) {
+    return { columns: [], sampleRows: [], fieldDelimiter: delimiter, hasHeader: false };
+  }
   const header = rows[0]!;
   const sample = rows.slice(1, 1 + SAMPLE_DATA_ROWS);
   const columns: DatasetColumn[] = header.map((rawName, colIdx) => {
@@ -138,7 +149,7 @@ function inferCsvSchema(text: string, delimiter: string): InferSchemaResponse {
     const values = sample.map((r) => r[colIdx] ?? "").filter((v) => v !== "");
     return { name, type: inferType(values) };
   });
-  return { columns, fieldDelimiter: delimiter, hasHeader: true };
+  return { columns, sampleRows: sample, fieldDelimiter: delimiter, hasHeader: true };
 }
 
 function inferType(samples: string[]): string {
@@ -146,7 +157,11 @@ function inferType(samples: string[]): string {
   if (samples.every(isInteger)) return "bigint";
   if (samples.every(isNumeric)) return "double";
   if (samples.every(isBoolean)) return "boolean";
-  if (samples.every(isIsoTimestamp)) return "timestamp";
+  // DATE vs TIMESTAMP split matters because LazySimpleSerDe's default
+  // timestamp format requires a time component — a DATE-typed column
+  // lets plain "yyyy-MM-dd" rows parse natively.
+  if (samples.every(isIsoDate)) return "date";
+  if (samples.every((s) => isIsoDate(s) || isIsoTimestamp(s))) return "timestamp";
   return "string";
 }
 
@@ -163,12 +178,15 @@ function isBoolean(s: string): boolean {
   return t === "true" || t === "false";
 }
 
+function isIsoDate(s: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(s);
+}
+
 function isIsoTimestamp(s: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?$/.test(s);
+  return /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$/.test(s);
 }
 
 function parseCsv(text: string, delimiter: string): string[][] {
-  // Chomp trailing partial line — we only got a byte-range, may have split mid-row.
   const normalized = text.replace(/\r\n/g, "\n").replace(/\n$/, "");
   const lastNl = normalized.lastIndexOf("\n");
   const safe = lastNl === -1 ? normalized : normalized.slice(0, lastNl);
@@ -202,30 +220,4 @@ function parseCsvLine(line: string, delimiter: string): string[] {
   }
   out.push(cur);
   return out;
-}
-
-// ----------------------------------------------------------------------------
-
-async function ensureDatabase(
-  athena: AthenaClient,
-  scope: AthenaScope,
-  database: string
-): Promise<void> {
-  const { executionId } = await startQuery(athena, scope, {
-    sql: createDatabaseDdl(database),
-  });
-  const start = Date.now();
-  for (;;) {
-    const status = await getQuery(athena, executionId);
-    if (status.state === "SUCCEEDED") return;
-    if (status.state === "FAILED" || status.state === "CANCELLED") {
-      throw new Error(
-        `CREATE DATABASE failed: ${status.stateChangeReason ?? status.state}`
-      );
-    }
-    if (Date.now() - start > ENSURE_DB_POLL_TIMEOUT_MS) {
-      throw new Error("Timed out waiting for CREATE DATABASE to finish");
-    }
-    await new Promise((r) => setTimeout(r, ENSURE_DB_POLL_INTERVAL_MS));
-  }
 }

@@ -3,19 +3,16 @@ import type { QueryRequest, QueryResultPage, QueryStatus } from "@athena-shell/s
 import type { AuthProvider } from "../auth/AuthProvider";
 import { apiDelete, apiGet, apiPost } from "./api";
 import { mockAthena } from "./mockAthena";
+import { proxyHeaders } from "./proxyHeaders";
 
 export type { QueryResultPage };
-
-async function authHeader(provider: AuthProvider) {
-  return provider.getProxyAuthHeader();
-}
 
 export async function startQuery(
   provider: AuthProvider,
   req: QueryRequest
 ): Promise<{ executionId: string }> {
   if (provider.isMock()) return mockAthena.startQuery(req.sql, req.database);
-  return apiPost("/query", req, { authHeader: await authHeader(provider) });
+  return apiPost("/query", req, { ...(await proxyHeaders(provider)) });
 }
 
 export async function getQuery(
@@ -23,7 +20,7 @@ export async function getQuery(
   executionId: string
 ): Promise<QueryStatus> {
   if (provider.isMock()) return mockAthena.getQuery(executionId);
-  return apiGet(`/query/${executionId}`, { authHeader: await authHeader(provider) });
+  return apiGet(`/query/${executionId}`, { ...(await proxyHeaders(provider)) });
 }
 
 export async function stopQuery(
@@ -31,7 +28,7 @@ export async function stopQuery(
   executionId: string
 ): Promise<void> {
   if (provider.isMock()) return mockAthena.stopQuery(executionId);
-  await apiDelete(`/query/${executionId}`, { authHeader: await authHeader(provider) });
+  await apiDelete(`/query/${executionId}`, { ...(await proxyHeaders(provider)) });
 }
 
 export async function getResults(
@@ -41,7 +38,7 @@ export async function getResults(
 ): Promise<QueryResultPage> {
   if (provider.isMock()) return mockAthena.getResults(executionId, nextToken);
   return apiGet(`/query/${executionId}/results`, {
-    authHeader: await authHeader(provider),
+    ...(await proxyHeaders(provider)),
     query: { nextToken },
   });
 }
@@ -52,7 +49,7 @@ export async function getDownloadUrl(
 ): Promise<string | null> {
   if (provider.isMock()) return null;
   const out = await apiGet<{ url: string }>(`/query/${executionId}/download`, {
-    authHeader: await authHeader(provider),
+    ...(await proxyHeaders(provider)),
   });
   return out.url;
 }
@@ -70,7 +67,7 @@ export async function fetchAllResultsDirect(
   if (provider.isMock()) return mockAthena.fetchAllResultsDirect(executionId, firstPage);
   const { url } = await apiGet<{ url: string }>(
     `/query/${executionId}/results-url`,
-    { authHeader: await authHeader(provider) }
+    { ...(await proxyHeaders(provider)) }
   );
   // Presigned S3 URL — signature is the auth, no proxy auth header applies.
   // `apiGet` is for /api/* JSON only; this path is intentionally raw fetch.

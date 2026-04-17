@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 
 import type { ProxyConfig } from "../config.js";
 import { createGlueClient } from "../aws/glueClient.js";
@@ -7,12 +7,12 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 
 export function schemaRouter(config: ProxyConfig): Router {
   const r = Router();
-  const glue = createGlueClient(config);
+  const glue = (req: Request) => createGlueClient(config, req.awsCredentials);
 
   r.get(
     "/databases",
     asyncHandler(async (req, res) => {
-      const page = await listDatabases(glue, req.query.nextToken as string | undefined);
+      const page = await listDatabases(glue(req), req.query.nextToken as string | undefined);
       res.json(page);
     })
   );
@@ -21,7 +21,7 @@ export function schemaRouter(config: ProxyConfig): Router {
     "/databases/:db/tables",
     asyncHandler(async (req, res) => {
       const page = await listTables(
-        glue,
+        glue(req),
         req.params.db!,
         req.query.nextToken as string | undefined
       );
@@ -32,7 +32,7 @@ export function schemaRouter(config: ProxyConfig): Router {
   r.get(
     "/databases/:db/tables/:table",
     asyncHandler(async (req, res) => {
-      const detail = await getTable(glue, req.params.db!, req.params.table!);
+      const detail = await getTable(glue(req), req.params.db!, req.params.table!);
       res.json(detail);
     })
   );

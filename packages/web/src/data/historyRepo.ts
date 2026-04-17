@@ -4,13 +4,12 @@ import type { AuthProvider } from "../auth/AuthProvider";
 import { apiGet } from "./api";
 import { favorites } from "./localDb";
 import { mockAthena } from "./mockAthena";
+import { proxyHeaders } from "./proxyHeaders";
 
 export async function listHistory(provider: AuthProvider): Promise<HistoryPage> {
   const remote = provider.isMock()
     ? await mockAthena.listHistory()
-    : await apiGet<HistoryPage>("/history", {
-        authHeader: await provider.getProxyAuthHeader(),
-      });
+    : await apiGet<HistoryPage>("/history", { ...(await proxyHeaders(provider)) });
   const favs = await favorites.list();
   const favIds = new Set(favs.map((f) => f.executionId));
 

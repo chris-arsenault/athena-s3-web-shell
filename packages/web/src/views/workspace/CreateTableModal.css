@@ -124,9 +124,42 @@
 
 .ct-col-row {
   display: grid;
-  grid-template-columns: 28px 1fr 140px;
+  grid-template-columns: 28px 1fr 140px auto;
   gap: var(--s-2);
   align-items: center;
+}
+
+.ct-col-overridden {
+  opacity: 0.9;
+}
+
+.ct-col-overridden .ct-col-type {
+  color: var(--amber-400);
+}
+
+.ct-schema-foot {
+  font-size: 0.8rem;
+  padding-top: var(--s-1);
+}
+
+.ct-inferring {
+  padding: var(--s-3) var(--s-3);
+  color: var(--color-text-muted);
+  font-size: 11.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.btn-warn {
+  background: var(--amber-400);
+  color: var(--ink-900);
+  border-color: var(--amber-400);
+}
+
+.btn-warn:hover:not(:disabled) {
+  background: var(--amber-500);
+  border-color: var(--amber-500);
 }
 
 .ct-col-idx {

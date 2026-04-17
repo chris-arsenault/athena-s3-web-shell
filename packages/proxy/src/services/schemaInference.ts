@@ -135,3 +135,54 @@ function inferTypeFromValues(values: unknown[]): string {
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
+
+/**
+ * Extract sample rows from JSONL/JSON text, serialized into string cells
+ * in the order of `columns` (matching `columns[i].name`). Missing keys
+ * produce an empty string cell. Used by the analyze flow so findings
+ * detectors (null-token, type-mismatch) have raw values to inspect.
+ */
+export function extractJsonlRows(
+  text: string,
+  columns: DatasetColumn[],
+  sampleRows: number
+): string[][] {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  const out: string[][] = [];
+  for (const line of lines.slice(0, sampleRows)) {
+    try {
+      const v = JSON.parse(line);
+      if (isRecord(v)) out.push(recordToRow(v, columns));
+    } catch {
+      // skip
+    }
+  }
+  return out;
+}
+
+export function extractJsonRows(
+  text: string,
+  columns: DatasetColumn[],
+  sampleRows: number
+): string[][] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return [];
+  }
+  if (Array.isArray(parsed)) {
+    return parsed.filter(isRecord).slice(0, sampleRows).map((r) => recordToRow(r, columns));
+  }
+  if (isRecord(parsed)) return [recordToRow(parsed, columns)];
+  return [];
+}
+
+function recordToRow(rec: Record<string, unknown>, columns: DatasetColumn[]): string[] {
+  return columns.map((c) => {
+    const v = rec[c.name];
+    if (v === null || v === undefined) return "";
+    if (typeof v === "string") return v;
+    return JSON.stringify(v);
+  });
+}

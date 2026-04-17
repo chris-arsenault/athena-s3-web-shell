@@ -1,6 +1,7 @@
 import type { AuthProvider } from "../auth/AuthProvider";
 import { apiPost } from "./api";
 import { mockSaveResult } from "./mockAthena";
+import { proxyHeaders } from "./proxyHeaders";
 
 export interface SaveResultOptions {
   targetKey: string;
@@ -22,6 +23,6 @@ export async function saveResultToWorkspace(
   return apiPost(
     `/query/${encodeURIComponent(executionId)}/save-to-workspace`,
     opts,
-    { authHeader: await provider.getProxyAuthHeader() }
+    { ...(await proxyHeaders(provider)) }
   );
 }

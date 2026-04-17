@@ -50,6 +50,7 @@ Working backlog for athena-shell — only items *not yet built*. See [closed iss
 | P1 | **Folder-level CREATE TABLE** (from closed #5) — register a folder of homogeneous files as one partitioned table. Handle mixed-schema detection + Hive partition paths. | M | new |
 | P2 | **Auto-add partitions on upload** (from closed #5) — when a user uploads to a path matching an existing table's partition scheme, offer one-click `ALTER TABLE ADD PARTITION` / `MSCK REPAIR TABLE`. | M | new |
 | P2 | **Glue Crawler integration** (from closed #5) — for large/partitioned datasets where manual schema entry doesn't scale; role scoped to the user's prefix. | L | new |
+| P2 | **Streamed file transforms via Lambda** — right-click menu on files outside `/datasets/` offering async compute-based conversions (JSON array → JSONL, BOM strip, Excel quoting normalization, encoding conversion, ragged-row drop). Runs as a VPC Lambda under the caller's STS creds, writes output to `/datasets/pending/<table>/`, reports progress via a job-state endpoint. Moved out of #18 because the DDL-only hygiene covers the common cases; keep this scoped to genuine file-rewrite needs. | L | new |
 | P3 | **CREATE OR REPLACE TABLE** (from closed #5) — today re-registration is a no-op (`IF NOT EXISTS`); add explicit replace with confirmation for schema evolution. | S | new |
 
 ## E. Auth, sessions, identity

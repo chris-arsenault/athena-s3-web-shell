@@ -19,3 +19,10 @@ export const MULTIPART_PART_SIZE_BYTES = 5 * 1024 * 1024;
 export const MULTIPART_QUEUE_SIZE = 4;
 
 export const MOCK_USER_HEADER = "x-mock-user";
+
+// Proxy-passthrough AWS credential headers — the SPA reads its STS creds
+// from the Identity Pool and attaches them per request so the proxy can
+// issue Athena/Glue calls under the caller's own role.
+export const AWS_ACCESS_KEY_HEADER = "x-aws-access-key-id";
+export const AWS_SECRET_KEY_HEADER = "x-aws-secret-access-key";
+export const AWS_SESSION_TOKEN_HEADER = "x-aws-session-token";

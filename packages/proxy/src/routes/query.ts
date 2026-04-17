@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 
 import { RESULTS_PAGE_SIZE } from "@athena-shell/shared";
 
@@ -17,7 +17,7 @@ const TERMINAL_STATES = new Set(["SUCCEEDED", "FAILED", "CANCELLED"]);
 
 export function queryRouter(config: ProxyConfig): Router {
   const r = Router();
-  const athena = createAthenaClient(config);
+  const athena = (req: Request) => createAthenaClient(config, req.awsCredentials);
 
   r.post(
     "/",
@@ -27,7 +27,7 @@ export function queryRouter(config: ProxyConfig): Router {
         res.status(400).json({ error: { message: "sql is required" } });
         return;
       }
-      const result = await startQuery(athena, req.user!.athena, {
+      const result = await startQuery(athena(req), req.user!.athena, {
         sql,
         database: req.body?.database,
       });
@@ -44,7 +44,7 @@ export function queryRouter(config: ProxyConfig): Router {
   r.get(
     "/:id",
     asyncHandler(async (req, res) => {
-      const status = await getQuery(athena, req.params.id!);
+      const status = await getQuery(athena(req), req.params.id!);
       if (TERMINAL_STATES.has(status.state)) {
         audit.queryEnd(req, {
           executionId: status.executionId,
@@ -62,7 +62,7 @@ export function queryRouter(config: ProxyConfig): Router {
   r.delete(
     "/:id",
     asyncHandler(async (req, res) => {
-      await stopQuery(athena, req.params.id!);
+      await stopQuery(athena(req), req.params.id!);
       audit.queryStop(req, { executionId: req.params.id! });
       res.json({ ok: true });
     })
@@ -73,7 +73,7 @@ export function queryRouter(config: ProxyConfig): Router {
     asyncHandler(async (req, res) => {
       const max = Number(req.query.maxResults ?? RESULTS_PAGE_SIZE);
       const page = await getResults(
-        athena,
+        athena(req),
         req.params.id!,
         req.query.nextToken as string | undefined,
         max

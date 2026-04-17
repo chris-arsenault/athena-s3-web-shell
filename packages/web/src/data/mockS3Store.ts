@@ -68,6 +68,20 @@ const seed = (): StoredObject[] => [
     lastModified: "2026-04-12T11:15:00Z",
     body: "id,name,email\n1,Alice,a@x.com\n2,Bob,b@x.com\n",
   },
+  {
+    // Messy CSV — demonstrates the auto-STRING-override heuristic:
+    // `subscription_date` has a regex-valid but semantically invalid
+    // row (2024-00-31) and `amount` has a value past Number.MAX_SAFE_INTEGER.
+    // Modal opens with both columns pre-overridden to STRING.
+    key: "users/dev/sample-data/dirty-orders.csv",
+    size: 240,
+    lastModified: "2026-04-14T08:00:00Z",
+    body:
+      "order_id,subscription_date,amount\n" +
+      "1001,2024-01-15,100\n" +
+      "1002,2024-02-15,9999999999999999999\n" +
+      "1003,2024-00-31,200\n",
+  },
 ];
 
 class MockS3Store {
