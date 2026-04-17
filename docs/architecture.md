@@ -1,55 +1,44 @@
 # athena-shell architecture
 
-This document is the source of truth for how athena-shell is built. If you're picking up development cold, read this end-to-end. For day-to-day conventions and gotchas see [CLAUDE.md](../CLAUDE.md); for the user-facing summary see [README.md](../README.md).
+The source of truth for how athena-shell is built. For day-to-day conventions and gotchas, see [conventions.md](conventions.md). For the auth model, see [auth.md](auth.md). For the API surface and data flows, see [api.md](api.md).
 
----
-
-## 1. Why this exists
+## Why this exists
 
 Non-technical users in regulated or network-restricted organizations need two things from AWS that the AWS console serves badly:
 
-1. **Move files in and out of S3** — the console's S3 page is workable but assumes IAM literacy and offers no concept of "your" workspace.
-2. **Run ad-hoc SQL against those files via Athena** — the Athena console exposes workgroups, output locations, query catalogs, and row-limit gotchas that confuse end users.
+1. **Move files in and out of S3** — the console's S3 page assumes IAM literacy and offers no concept of "your" workspace.
+2. **Run ad-hoc SQL against those files via Athena** — the Athena console exposes workgroups, output locations, and row-limit gotchas that confuse end users.
 
-Free desktop tools like DBeaver solve the SQL UX, but **none support Cognito-federated SSO** — required when users authenticate via an enterprise IdP (Entra / Okta / etc.), not user/password databases. They also assume the user's machine can reach the data, which often isn't true in restricted environments.
+Free desktop tools like DBeaver solve the SQL UX but **none support Cognito-federated SSO**, which is required when users authenticate via an enterprise IdP (Entra / Okta / etc.). They also assume the user's machine can reach the data, which often isn't true in restricted environments.
 
-athena-shell is a **thin web shell over the AWS APIs that already do the work**, with two design priorities:
+athena-shell is a **thin web shell over the AWS APIs that already do the work**. Two design priorities:
 
-- **Almost no business logic.** The IAM role enforces permissions. Workgroups enforce query budgets. We don't reimplement these — we just present them.
-- **Fits inside a private VPC.** No internet egress, no API Gateway, no edge runtimes, no third-party SaaS. Everything ships as one ECS Fargate task. This is what makes it usable in environments where everything else can't reach the data.
+- **Almost no business logic.** The IAM role enforces permissions. Workgroups enforce query budgets. We don't reimplement these — we render them.
+- **Fits inside a private VPC.** No internet egress, no API Gateway, no edge runtimes. One ECS Fargate task.
 
----
+## Constraints that shape every decision
 
-## 2. Constraints that shape every decision
+### VPC-bound deployment, no internet egress
 
-### 2.1 VPC-bound deployment, no internet egress
-Production runs inside a private VPC on AWS commercial with **no internet egress**. This eliminates the architectural patterns most SaaS apps would reach for first:
+Production runs inside a private VPC on AWS commercial with no internet egress. This rules out:
 
-- ❌ API Gateway — internet-facing by default
-- ❌ CloudFront / Cloudflare / Vercel Edge — external network plane
+- ❌ API Gateway (internet-facing)
+- ❌ CloudFront / Cloudflare / edge runtimes
 - ❌ Lambda@Edge
-- ❌ Any SaaS dependency reachable only over the public internet
-- ❌ Public package installs at runtime (image pulls go through interface ECR endpoints)
+- ❌ SaaS reachable only over the public internet
+- ❌ Runtime package installs (ECR image pulls go via interface endpoint)
 
-What's left:
-- ✅ ECS Fargate behind an internal ALB
-- ✅ AWS service calls via VPC interface/gateway endpoints
-- ✅ Cognito (via interface endpoint) once auth is wired
-- ✅ S3 via gateway endpoint
+What's left: ECS Fargate behind an internal ALB, AWS service calls via VPC interface/gateway endpoints.
 
-This shape is common in regulated finance, healthcare, defense, aerospace, and public-sector deployments — anywhere a security review forbids data leaving the VPC.
+### Standard tech over novel tech
 
-### 2.2 Standard tech over novel tech
-Mature, widely-known dependencies make security review and contributor onboarding easier. We use Express (not Hono), Vite (not Webpack/Bun), AWS SDK v3 (the only choice), and idb (the lightest sane IndexedDB wrapper). Any time you reach for something newer, justify it in writing.
+Express over Hono. Vite over Webpack / Bun. AWS SDK v3 (no choice). idb for IndexedDB. Any time you reach for something newer, justify it in writing — security review and contributor onboarding cost more than the marginal feature.
 
-### 2.3 Thin shell, not a platform
-Don't build features that AWS already gives us. Bucket policies, IAM roles, workgroup quotas, Athena query history, Glue catalog — these are all the source of truth. The shell renders them and wires UX flows. If a feature requires duplicating IAM logic in TypeScript, that's a smell.
+### Thin shell, not a platform
 
----
+Don't build features AWS already gives us. Bucket policies, IAM roles, workgroup quotas, Athena query history, Glue catalog — these are authoritative. If a feature requires duplicating IAM logic in TypeScript, that's a smell.
 
-## 3. System architecture
-
-### 3.1 Top-down view
+## System architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -57,676 +46,155 @@ Don't build features that AWS already gives us. Bucket policies, IAM roles, work
 │                                                                     │
 │  Browser ─── TLS ───► internal ALB ─── HTTP ───► ECS Fargate task   │
 │      │                                            ┌─────────────┐   │
-│      │                                            │  Container  │   │
-│      │                                            │             │   │
+│      │  /api responses                            │  Container  │   │
+│      ├◄──────────────────────────────────────────┤             │   │
 │      │                                            │  Express    │   │
-│      │  ┌─────────────────────────────────────────┤   /api/*    │   │
-│      │  │ /api responses (Athena, Glue, presigns) │             │   │
-│      │  │                                         │  /* (SPA)   │   │
-│      │  │ /* SPA static assets                    │             │   │
-│      │  │                                         └─────┬───────┘   │
-│      │                                                  │           │
+│      │  /* SPA static assets                      │   /api/*    │   │
+│      ├◄──────────────────────────────────────────┤             │   │
+│      │                                            │  /* (SPA)   │   │
+│      │                                            └─────┬───────┘   │
 │      │                                                  │ AWS SDK v3│
 │      │                                                  ▼           │
-│      │                              ┌──── VPC interface endpoints ──│
-│      │                              │   Athena, Glue, STS, Logs,    │
-│      │                              │   ECR, Secrets, SSM, KMS      │
-│      │                              └───────────────────────────────│
+│      │                        VPC interface endpoints                │
+│      │                        (Athena, Glue, Logs, ECR, KMS, …)     │
 │      │                                                              │
-│      │  AWS SDK v3 (browser bundle)                                 │
-│      └──────────────────► S3 (gateway endpoint) ─── data bucket     │
-│                                                  ─── athena results │
+│      │  AWS SDK v3 (browser)                                        │
+│      └──────────────────► S3 (gateway endpoint)                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-Two traffic paths matter:
+Two traffic paths:
 
-1. **SPA → proxy → AWS** for Athena, Glue, and Athena-results presigning. The proxy is the only place that holds workgroup config and minting result-download URLs.
-2. **SPA → S3 directly** for file list/upload/download/delete. The browser holds short-lived STS credentials (issued via Cognito Identity Pool in v2; mocked in v1) and the bucket policy + IAM role enforce scope. **No proxy round-trip for S3 ops** — keeps multi-GB uploads off the proxy and removes a memory bottleneck.
+1. **SPA → proxy → AWS** for Athena, Glue, and Athena-results presigning. The proxy reads the user's STS credentials from three `x-aws-*` request headers and forwards them into AWS SDK clients — every AWS call runs under the caller's own IAM role.
+2. **SPA → S3 directly** for file list / upload / download / delete. Browser holds short-lived STS creds (Cognito Identity Pool), bucket policy + per-user IAM role enforce scope. No proxy round-trip for S3.
 
-This is the **hybrid AWS access pattern**, decided up front. The alternative ("everything through the proxy") was rejected because the proxy would have to assemble multipart uploads in memory and stream multi-GB downloads back to the browser; not viable for ad-hoc datasets.
+**Hybrid AWS access was a first-principles choice.** "Everything through the proxy" was rejected because the proxy would have to assemble multipart uploads in memory and stream multi-GB downloads back to the browser. Not viable for ad-hoc datasets.
 
-### 3.2 The single-container choice
+### The single-container choice
 
-Both halves — Express proxy and built SPA — ship in **one container**. The Dockerfile copies `packages/web/dist/` into the proxy's `/app/public/`, and `serveSpa.ts` mounts it as static + an SPA history fallback. There is one ALB target group, one image to deploy, one healthcheck.
+Both halves — Express proxy and built SPA — ship in one container. Dockerfile copies `packages/web/dist/` into the proxy's `public/`; `serveSpa.ts` mounts it as static + SPA history fallback. One ALB target group, one image, one healthcheck.
 
-We considered serving the SPA from a separate Fargate task or from S3+CloudFront. Both were rejected:
-- Separate Fargate task: doubles deployment surface for a 22 MB asset bundle that doesn't change independently of the proxy.
-- S3+CloudFront: CloudFront is internet-facing by default; the target environment forbids it.
+Separate-Fargate-task and S3+CloudFront were considered and rejected: deployment surface doubled for a 22 MB asset bundle that never changes independently of the proxy, and CloudFront is internet-facing by default.
 
-The trade-off: SPA and proxy are version-locked. In practice this is a feature — the `/api` shape and the SPA's expectations evolve together.
-
-### 3.3 Repo layout
+### Repo layout
 
 ```
 athena-shell/
 ├── packages/
-│   ├── shared/                         # cross-boundary types only
-│   │   └── src/
-│   │       ├── types/{auth,query,schema,s3}.ts
-│   │       └── constants.ts
-│   ├── proxy/                          # Express server
-│   │   └── src/
-│   │       ├── index.ts                # entrypoint
-│   │       ├── server.ts               # express factory (testable)
-│   │       ├── config.ts               # env parsing
-│   │       ├── auth/                   # AuthProvider impls
-│   │       ├── middleware/             # authenticate, errorHandler
-│   │       ├── aws/                    # SDK client factories
-│   │       ├── routes/                 # /api/* handlers
-│   │       ├── services/               # AWS-call helpers, mappers
-│   │       ├── static/                 # SPA static-serve mount
-│   │       └── utils/                  # asyncHandler, etc.
-│   └── web/                            # Vite + React SPA
-│       └── src/
-│           ├── main.tsx, App.tsx, routes.tsx, index.css
-│           ├── auth/                   # AuthProvider impls + context
-│           ├── data/                   # api wrapper, repos, IndexedDB, mock fakes
-│           ├── hooks/                  # useAsyncAction, usePolling, useDropzone
-│           ├── components/             # AppShell, ErrorBoundary, etc.
-│           ├── views/
-│           │   ├── workspace/          # S3 file browser
-│           │   └── query/              # SQL interface
-│           └── utils/                  # formatBytes, parseS3Path, etc.
-├── eslint-rules/                       # 6 local custom rules
-├── docker/Dockerfile                   # multi-stage, single runtime image
-└── docs/architecture.md                # this file
+│   ├── shared/        # cross-boundary types (auth, query, schema, s3, datasets)
+│   ├── proxy/         # Express server — routes, auth, services, static SPA mount
+│   └── web/           # Vite + React SPA — views, data repos, mock stores
+├── eslint-rules/      # 6 local custom rules
+├── infrastructure/    # Terraform for the demo deployment
+├── docker/            # multi-stage Dockerfile
+└── docs/              # you are here
 ```
 
-Conventions: kebab-case dirs, PascalCase for `.tsx` components, camelCase for utility `.ts`, co-located `Component.css` and `Component.test.tsx`. See [CLAUDE.md](../CLAUDE.md#lint-rules-to-know).
+See [conventions.md](conventions.md) for naming, lint, and style rules.
 
----
+## Deployment topology
 
-## 4. Auth architecture
+### Container
 
-### 4.1 The `AuthProvider` interface
+Multi-stage (`docker/Dockerfile`):
 
-A single abstraction sits in front of all auth logic on both sides of the wire.
+1. **Builder** — `node:20-alpine` + pnpm 10, builds all three packages.
+2. **Deploy stage** — `pnpm --filter @athena-shell/proxy --prod --legacy deploy /tmp/deploy` flattens the workspace so a plain `COPY` produces a standalone tree.
+3. **Runtime** — `node:20-alpine`, copies `/tmp/deploy` + `packages/web/dist`, runs as non-root `app`, healthcheck on `/api/health`.
 
-**Web** — `packages/web/src/auth/AuthProvider.ts`:
-```ts
-interface AuthProvider {
-  getContext(): Promise<AuthContext>;            // identity + scoping
-  getCredentials(): Promise<AwsTempCredentials>; // STS creds for browser-direct S3
-  getProxyAuthHeader(): Promise<{ name; value } | null>;  // header for /api calls
-  signOut(): Promise<void>;
-  isMock(): boolean;                             // repos branch on this
-}
-```
+Image is dominated by Monaco's lazy chunk (~22 MB in the image; chunked over the wire).
 
-**Proxy** — `packages/proxy/src/auth/authProvider.ts`:
-```ts
-interface AuthProvider {
-  resolve(req: Request): Promise<AuthContext>;   // attached to req.user by middleware
-}
-```
-
-Both have a `MockAuthProvider` (dev default) and a fully implemented real-auth provider — `CognitoAuthProvider` on the SPA, `AlbAuthProvider` on the proxy. Selected at build time via `VITE_AUTH_PROVIDER` (web) and `AUTH_PROVIDER` (proxy). See §4.4 for the wiring.
-
-### 4.2 `AuthContext` — the identity + scope tuple
-
-The single shape that flows through the system, defined in `packages/shared/src/types/auth.ts`:
-
-```ts
-interface AuthContext {
-  userId: string;
-  displayName: string;
-  email: string;
-  region: string;
-  roleArn: string;
-  s3:     { bucket: string; prefix: string };          // workspace scope
-  athena: { workgroup: string; outputLocation: string;
-            defaultDatabase?: string };
-}
-```
-
-Every component reads scoping from this object. The proxy attaches it to `req.user` via `middleware/authenticate.ts`. The SPA reads it from `useAuth().context`. **There is no other source of "what the user can do."**
-
-### 4.3 Mock mode (v1, default)
-
-`MockAuthProvider` returns a hardcoded identity and tells repos to route to in-memory fakes:
-
-- Web: `data/mockS3Store.ts` (an in-memory file system seeded with sample CSVs) and `data/mockAthena.ts` (databases, tables, query lifecycle simulation with realistic state transitions).
-- Proxy: `MockAuthProvider` reads `X-Mock-User` header against `MOCK_USERS_JSON` env var; defaults to a single `dev-user` AuthContext.
-
-The full app is functional end-to-end in mock mode with **no AWS credentials**. This is the dev default and the integration-test default.
-
-### 4.4 Cognito mode (implemented — demo deployment)
-
-Implemented and live. The actual flow:
-
-1. SPA boots on `https://shell.ahara.io/…` — no session → `CognitoAuthProvider.getContext()` triggers `signInRedirect()`.
-2. Redirect to Cognito Hosted UI at `https://auth.services.ahara.io/oauth2/authorize` with PKCE (`code_challenge` + `code_challenge_method=S256`). Code verifier + state are stored in `sessionStorage`.
-3. User authenticates. (Demo uses direct Cognito users; Entra federation is a commented `aws_cognito_identity_provider` placeholder in `infrastructure/terraform/cognito.tf` — no code change needed when promoting to SSO.)
-4. Cognito 302s back to `https://shell.ahara.io/auth/callback?code=…&state=…`.
-5. `CallbackView` reads code + state (single-shot: `useRef` latch + `history.replaceState` scrub), POSTs to `/oauth2/token` with the PKCE verifier, stores the resulting ID + access + refresh tokens in `sessionStorage`, navigates to the original URL.
-6. Any `/api/*` request carries `Authorization: Bearer <id_token>`. **ALB's `jwt-validation` action** on the listener rule (`alb.tf` priority 220) verifies signature + issuer + expiry against Cognito's JWKS at the edge; rejects with 401 on failure, forwards on success.
-7. Proxy's `AlbAuthProvider` reads the same bearer token, decodes the JWT payload (no re-verification — ALB already did it), and derives `AuthContext` **deterministically** from the `cognito:username` claim:
-   - `workgroup = ${NAME_PREFIX}-${username}` (matches per-user workgroups in `athena.tf`)
-   - `s3 prefix = users/${username}/`
-   - `roleArn   = arn:aws:iam::${acct}:role/${NAME_PREFIX}-user-${username}`
-   No DynamoDB lookup — the "trust the identity provider" principle. The only authoritative map is the resource-name ↔ username convention itself.
-8. For browser-direct S3, `CognitoAuthProvider.getCredentials()` calls `fromCognitoIdentityPool({ logins: { cognito-idp...: idToken } })`. The Identity Pool's rule-based mapping (`identity-pool.tf`) dispatches each user to their dedicated IAM role (`iam-user-roles.tf`); the role's policy is scoped to `users/<username>/*` on the data bucket. Per-user AWS scoping is **IAM-enforced** at the credentials layer — the proxy never handles STS.
-
-ALB's `jwt-validation` action does not inject `x-amzn-oidc-*` headers without `ClaimsMapping` configured, and AWS provider 6.41 doesn't expose `ClaimsMapping` yet. The proxy reads the token directly from `Authorization: Bearer …` — works with or without claims mapping, forward-compatible once the provider catches up.
-
-#### Three gates against silent-mock deployment
-
-1. **Fargate task env** hard-codes `AUTH_PROVIDER=alb` (+ `MOCK_AUTH=0`). Proxy refuses to start without the five alb-mode vars.
-2. **ALB `jwt-validation`** rejects unauthenticated `/api/*` at the edge.
-3. **SPA build** bakes `VITE_AUTH_PROVIDER=cognito` — a mock-mode proxy (which expects `X-Mock-User`) 401s every bearer-token request, so the SPA can't silently fall into mock.
-
-#### Swapping to Entra SSO
-
-`infrastructure/terraform/cognito.tf` contains a commented `aws_cognito_identity_provider "entra"` block (SAML + OIDC examples). To federate:
-1. Uncomment the block, populate the metadata URL / OIDC issuer.
-2. Add `"Entra"` to `supported_identity_providers` on the app client.
-3. Delete `users.tf` (federated users are provisioned on first login).
-4. Switch the Identity Pool rule-based mapping (in `identity-pool.tf`) from `cognito:username Equals <user>` to `cognito:groups Contains <group>` — per-team roles replace per-user roles.
-
-No code changes on the proxy or SPA — both are claims-based and the claim names are stable under federation.
-
----
-
-## 5. Data layer
-
-### 5.1 The `api.ts` chokepoint
-
-`packages/web/src/data/api.ts` is **the only place in the SPA that calls `fetch`**. The `local/no-direct-fetch` ESLint rule enforces this. `api.ts` exports `apiGet`/`apiPost`/`apiDelete` which:
-
-- Inject the `AuthProvider`'s proxy header (mock or bearer)
-- Build URLs from `API_BASE` + path + query params
-- Parse JSON responses
-- Throw `ApiError` with status + parsed payload on non-2xx
-
-This is the seam where future cross-cutting concerns (request IDs, retries, telemetry) plug in.
-
-### 5.2 Repos: one per resource
-
-Each domain has a repo that abstracts "real AWS vs. mock":
-
-| Repo | Domain | Real path | Mock path |
-|---|---|---|---|
-| `s3Repo` | S3 file ops | AWS SDK v3 `S3Client` direct from browser | `mockS3Store` (in-memory) |
-| `queryRepo` | Athena query lifecycle | `apiPost`/`apiGet` to proxy | `mockAthena` (in-memory) |
-| `schemaRepo` | Glue catalog | `apiGet` to proxy | `mockAthena` |
-| `historyRepo` | Query history (merged) | `apiGet` to proxy + `localDb.favorites` | `mockAthena` + `localDb.favorites` |
-| `localDb` | IndexedDB (drafts, favorites, named) | `idb` library, no remote | same — local only |
-
-The branch is always `if (provider.isMock()) return mockX(...); else return apiCall(...);` — explicit, greppable, no Magic Strategy registry.
-
-One repo has a context layer on top of it: **`schemaRepo` is wrapped by `data/schemaContext.tsx`**, a React context (`SchemaProvider` + `useSchema()` hook) that holds a single cache of `{databases, tablesByDb, columnsByTable}` for the lifetime of a QueryView session. Both the `SchemaTree` sidebar and the Monaco SQL completion provider read from the same cache. On mount it eagerly calls `listDatabases` then `Promise.all(listTables(...))` for every db; columns are lazy, loaded via `loadColumns(db, table)` when a user expands a table in the tree or triggers `table.<autocomplete>` in the editor. Inside the QueryView tree, call `useSchema()` — don't go through `schemaRepo` directly, or the two surfaces diverge.
-
-### 5.3 IndexedDB schema
-
-`localDb.ts` defines DB `athena-shell` v1 with three object stores:
-
-| Store | Key | Indexes | Purpose |
-|---|---|---|---|
-| `drafts` | `id` (autoincrement) | `updatedAt` | Editor autosave |
-| `favorites` | `id` (autoincrement) | `executionId` (unique) | Starred queries |
-| `namedQueries` | `id` (autoincrement) | `name` (unique) | Saved queries |
-
-`historyRepo.list()` merges Athena's `ListQueryExecutions` page with local favorites. Favorites tagged `source: "local"` show up even when the underlying execution has aged out of Athena's 45-day retention.
-
-### 5.4 Browser-direct S3: client construction
-
-```ts
-new S3Client({
-  region: ctx.region,
-  credentials: () => provider.getCredentials(),  // function, so SDK refreshes
-});
-```
-
-Passing a function (not a literal) lets the SDK call back when creds expire. The `CredentialsCache` (in `auth/credentialsCache.ts`) wraps the provider with a 5-minute skew refresh, so concurrent S3 ops don't fan out to N STS calls.
-
----
-
-## 6. Request flows
-
-### 6.1 Workspace: list a folder
-
-```
-Browser
-  WorkspaceView mounts
-  └─ effect: listFolder(provider, ctx, prefix)
-      └─ s3Repo.listFolder
-          ├─ ensureScoped(ctx, prefix)   ← rejects ".." and out-of-prefix paths
-          ├─ if isMock → mockS3.list(prefix) → sorted folders+objects
-          └─ else → S3Client.send(ListObjectsV2Command{Delimiter:"/"})
-              → CommonPrefixes = subfolders, Contents = files
-  Render FileBrowser with folders + objects
-```
-
-**Why `Delimiter:"/"`**: gives us the hierarchical view S3 doesn't actually have. CommonPrefixes are virtual folders; Contents are leaf objects.
-
-### 6.2 Workspace: upload a file
-
-```
-User drops files
-  UploadDropzone → useDropzone → walks DataTransferItem.webkitGetAsEntry()
-    └─ recursive directory walk yields DroppedFile[] with relativePath
-      └─ useUploads.enqueue(files)
-          └─ for each file:
-              create UploadProgress {id, status: "pending"}
-              call s3Repo.uploadFile(provider, ctx, key, file, ...)
-                ├─ ensureScoped(ctx, key)
-                ├─ if isMock → simulateUploadProgress (timer-based fake)
-                └─ else → @aws-sdk/lib-storage Upload class
-                    ├─ partSize 5MB, queueSize 4
-                    ├─ on httpUploadProgress → updates UploadProgress
-                    └─ done → succeeded
-              on success → refresh listing
-              on failure → mark UploadProgress as "failed" with error
-```
-
-**Multipart for everything ≥5MB.** `lib-storage` does it transparently — single PUT for small, multipart for large, retries on transient errors, abortable. The `AbortIncompleteMultipartUpload` lifecycle rule on the bucket cleans orphan parts (deployment-side concern, see §8).
-
-### 6.3 Query: schema browse
-
-```
-SchemaTree mounts
-  └─ schemaRepo.listDatabases(provider)
-      └─ apiGet("/schema/databases") → proxy → Glue.GetDatabases
-  user expands a database
-      └─ schemaRepo.listTables(provider, db)
-          └─ apiGet(`/schema/databases/${db}/tables`) → Glue.GetTables
-  user expands a table
-      └─ schemaRepo.getTable(provider, db, table)
-          └─ apiGet(`/schema/databases/${db}/tables/${table}`) → Glue.GetTable
-              → returns columns + partitionKeys + location
-```
-
-Pagination is wired in the API but the SPA only shows page 1 of each level today. Add a "show more" affordance later if catalogs grow.
-
-### 6.4 Query: run a query end-to-end
-
-```
-User clicks Run
-  QueryView → useQueryRunner.run()
-    ├─ queryRepo.startQuery(provider, {sql})
-    │   └─ apiPost("/query", {sql})
-    │       └─ proxy: services/queryService.startQuery
-    │           └─ Athena.StartQueryExecution with workgroup + outputLocation
-    │           ← returns {executionId}
-    ├─ poll loop: every 1s
-    │   └─ queryRepo.getQuery(provider, executionId)
-    │       └─ apiGet(`/query/${id}`) → Athena.GetQueryExecution
-    │           ← state: QUEUED → RUNNING → SUCCEEDED/FAILED/CANCELLED
-    │   ├─ if terminal SUCCEEDED → fetch results
-    │   ├─ if FAILED → surface stateChangeReason as error
-    │   └─ timeout at 10 minutes
-    └─ queryRepo.getResults(provider, executionId)
-        └─ apiGet(`/query/${id}/results`) → Athena.GetQueryResults (page 1, 1000 rows)
-            ← columns + rows
-ResultsTable renders; HistoryPanel re-fetches; the query is now in Athena's history
-```
-
-**Polling, not long-poll or WebSocket.** Athena queries are typically seconds-to-minutes; 1-second polling is fine. WebSocket would require sticky sessions on the ALB and cost more than it saves.
-
-**Stop button**: `queryRepo.stopQuery` → `DELETE /api/query/:id` → `Athena.StopQueryExecution`. The poll loop sees state `CANCELLED` and exits.
-
-### 6.5 Query: download CSV
-
-```
-User clicks ⬇ CSV
-  ResultsTable: in mock mode, build CSV in browser from current results page
-  In real mode (post-v1 wiring):
-    queryRepo.getDownloadUrl(provider, executionId)
-      └─ apiGet(`/query/${id}/download`)
-          └─ proxy: getQuery → outputLocation = "s3://bucket/key.csv"
-          └─ proxy: presignResultsDownload → S3 presign 15-min URL
-          ← returns {url}
-  Browser navigates to presigned URL, downloads directly from S3
-```
-
-The proxy never streams the CSV body. This is the single largest "don't blow up the proxy" decision.
-
-### 6.6 History: merging Athena + IndexedDB
-
-```
-HistoryPanel → historyRepo.list(provider)
-  ├─ remote: apiGet("/history") → proxy → ListQueryExecutions + BatchGetQueryExecution
-  ├─ local: localDb.favorites.list() → IndexedDB
-  ├─ merge by executionId; favorites get source: "local" if not present remotely
-  └─ sort by submittedAt desc
-```
-
-Toggle favorite: writes to IndexedDB only; doesn't touch Athena. Athena's history is read-only from our perspective.
-
----
-
-## 7. Frontend internals
-
-### 7.1 Routing
-`react-router-dom` `createBrowserRouter`. Two routes: `/workspace` and `/query`, plus `/` redirects to `/workspace`. The proxy's `serveSpa.ts` mounts an SPA-history fallback so deep links work.
-
-### 7.2 State
-Per-component `useState`/`useReducer`. Auth lives in React context (`auth/authContext.tsx`). No global store. The data layer is "fetch on mount, cache locally if needed" — for a tool this size that's plenty.
-
-### 7.3 Hooks worth knowing
-- `useAsyncAction(fn)` — idle/loading/success/error state machine. Returns `{status, data, error, run, reset, isLoading}`. Use this for any async action triggered by user interaction.
-- `usePolling({fn, intervalMs, until, timeoutMs, enabled})` — generic poller with timeout. Used by query lifecycle.
-- `useDropzone(onFiles)` — HTML5 drag-drop with directory traversal via `webkitGetAsEntry`. Browser support: Chrome/Edge/Firefox; Safari is partial.
-
-### 7.4 Monaco editor
-Lazy-loaded. `SqlEditor.tsx` is a `Suspense` wrapper; `SqlEditorImpl.tsx` does the actual `monaco-editor` import. The Vite plugin `vite-plugin-monaco-editor` emits the editor worker as a separate chunk. The lazy chunk is ~3.3 MB / 856 KB gzipped — acceptable because it loads only when a user opens the Query view.
-
-If you ever import from `monaco-editor` outside `SqlEditorImpl.tsx`, the bundle splits break and the main chunk doubles. Don't.
-
-Two pieces of custom logic live on the editor at mount:
-
-- **Custom theme** `athena-shell-dark` — registered once (guarded by a module flag). Maps SQL tokens to the operator-console palette: rust keywords, phosphor strings, blueprint types, amber numbers, bone identifiers. Cursor and active line number are rust; selection is rust-tinted. Defined inline in `SqlEditorImpl.tsx`.
-- **Schema-aware completion provider** — a `monaco.languages.registerCompletionItemProvider("sql", ...)` registration, with the pure suggestion-building logic in `views/query/sqlCompletions.ts`. Trigger character is `.`. Flow:
-  - `word.value.` (qualified) → if the qualifier matches a database, suggest its tables; if it matches a table name, suggest its columns. Columns lazy-fetch through `useSchema().loadColumns(db, table)` when not yet cached — the provider returns a Promise, Monaco shows a loading state, and resolves when ready.
-  - Unqualified → suggest all databases (Module kind), all known tables (Class kind, with `table · db` detail), all cached columns (Field kind, with `type · db.table` detail), and a curated SQL keyword list. `sortText` prefixes (`1_*`, `2_*`, `3_*`, `9_*`) rank dbs → tables → columns → keywords.
-
-Both the theme and the provider are disposed in the cleanup effect, so remounting the editor (HMR, navigation) doesn't accumulate registrations. A ref keeps the provider reading the latest schema snapshot without re-registering.
-
-### 7.5 Styling
-Plain CSS, co-located. `src/index.css` defines the full token system — palette (`--ink-*`, `--bone-*`, `--rust-*`, `--phosphor-*`, `--amber-*`, `--crimson-*`, `--blueprint-*`), semantic aliases (`--color-bg/surface/text/accent/success/...`), scales (`--s-0..8` spacing, `--r-0..2` radii, `--dur-*` duration, `--ease-*` easing), and fonts (`--font-display` Fraunces+serif, `--font-ui`/`--font-mono` Berkeley/JetBrains/Plex stack — **everything UI is monospace**).
-
-Shared atoms: `.tok` (bracketed status badge with color modifiers), `.dot` (pulsing indicator), `.reg` (register-mark corners for framed panels), `.btn` / `.btn-primary` / `.btn-ghost` / `.btn-danger`, `.kbd`, `.stagger > *` for orchestrated reveals. Layout utilities: `.flex-row` / `.flex-col` / `.gap-*` / `.ml-auto` / `.text-muted` / `.tnum` (tabular-nums) / `.tracked` (uppercase letter-spaced).
-
-Aesthetic intent — "operator console": warm ink ground, rust brand, phosphor live signals, blueprint secondary, monospace-heavy UI, register-mark framing, subtle grid backdrop, staggered reveals. Commit to this; don't slide back toward generic dark-SaaS.
-
-One subtle pitfall with `.flex-row`: it sets `align-items: center`, which is right for inline rows of mixed-height content (toolbars, header) but wrong for layout containers that should stretch children to fill the viewport. `.console-body` (in `AppShell.css`) and `.query-view` (in `QueryView.css`) explicitly override to `align-items: stretch` so the nav / main / panels fill vertically. If you build a new layout container on top of `.flex-row`, override it.
-
-`local/no-inline-styles` is an error. The escape hatch — for genuinely dynamic values like progress-bar widths — is a per-line eslint disable with a comment explaining why. There's exactly one in the codebase right now (in `UploadQueue.tsx` for the bar fill width).
-
----
-
-## 8. Backend internals
-
-### 8.1 Server composition
-`server.ts` is a factory: `createServer(config) → Express`. This is what tests use. `index.ts` is the entrypoint that loads config, creates the server, and listens. Keeping the factory testable is why the proxy has supertest tests covering routes.
-
-Middleware order matters:
-```
-express.json (body parser)
-morgan (request log)
-healthRouter (no auth — load balancer needs this even when auth is broken)
-auth router:
-  authenticate middleware → req.user
-  /session, /schema, /query, /history, /query/:id/download
-errorHandler (final)
-```
-
-Anything before `authenticate` is unauthenticated. Anything after gets `req.user`.
-
-### 8.2 AWS clients
-Currently process-singletons (`createAthenaClient`, `createGlueClient`, `createS3Client`) using the task role. Per-request construction with assumed-role creds is on the backlog ([#2](https://github.com/chris-arsenault/athena-s3-web-shell/issues/2)) and will replace these with a per-request factory.
-
-### 8.3 Services vs routes
-- **Routes** parse HTTP (params, query, body), call services, shape responses. No AWS SDK imports in routes.
-- **Services** wrap AWS SDK calls and translate AWS shapes → our shared types. No HTTP awareness.
-
-This split exists so a future caller (CLI, other service) could reuse services without HTTP. It also keeps routes scannable.
-
-### 8.4 Error handling
-Routes are wrapped in `asyncHandler(fn)` which forwards async errors to the `errorHandler` middleware. Errors with a `.status` field set the HTTP status; everything else is 500. 5xx errors are logged with the stack; 4xx are not (they're noise).
-
-`UnauthorizedError` (in `auth/authProvider.ts`) has `status = 401`.
-
-### 8.5 Static SPA
-`mountSpa(app, staticDir)`:
-- `express.static(root, {index: false})` serves built assets
-- `app.get(/^\/(?!api\/).*/, ...)` is the SPA history fallback — anything not under `/api` returns `index.html`
-
-This is mounted **after** the API routes so they take precedence.
-
----
-
-## 9. Deployment topology
-
-### 9.1 Container
-Multi-stage Dockerfile in `docker/Dockerfile`:
-
-1. **Builder** — `node:20-alpine` + pnpm 10.29.3, runs `pnpm install` then builds all three packages
-2. **Deploy stage** — `pnpm --filter @athena-shell/proxy --prod --legacy deploy /tmp/deploy` produces a flat `node_modules` tree without pnpm's symlink layout (which doesn't survive `COPY` cleanly)
-3. **Runtime** — `node:20-alpine`, copies `/tmp/deploy` and `packages/web/dist`, runs as non-root `app` user, healthcheck on `/api/health`, `CMD ["node", "dist/index.js"]`
-
-Image size is dominated by Monaco's lazy chunk (~22 MB SPA assets in the image; chunked over the wire as the user navigates).
-
-### 9.2 ECS Fargate task
+### ECS Fargate task
 
 | Setting | Value |
 |---|---|
-| Network mode | `awsvpc` (required for Fargate) |
-| CPU / memory | 1 vCPU / 2 GB (start; size up if Athena polling becomes hot) |
+| Network mode | `awsvpc` (required) |
+| CPU / memory | 1 vCPU / 2 GB (start; size up if Athena polling is hot) |
 | Container port | 8080 |
-| Task role | See §9.3 |
-| Execution role | Standard (ECR pull, CloudWatch Logs) |
+| Task role | No app permissions — only ECR pull + CloudWatch log writes. AWS calls run under the caller's passthrough STS creds. See [auth.md](auth.md#per-user-iam-via-credential-passthrough) |
+| Execution role | Standard |
 | Healthcheck | `GET /api/health` |
-| Subnets | Private (no public IP) |
+| Subnets | Private, no public IP |
 | Security group | Inbound from internal ALB SG only |
 
-### 9.3 Task IAM role (v1)
+### Required VPC endpoints
 
-Currently the task role does all AWS work directly (per-user `AssumeRoleWithWebIdentity` is [#2](https://github.com/chris-arsenault/athena-s3-web-shell/issues/2)). Required policies:
+All interface (with private DNS) except S3 which is a gateway endpoint:
 
-```jsonc
-{
-  "Statement": [
-    { "Effect": "Allow",
-      "Action": [
-        "athena:StartQueryExecution",
-        "athena:GetQueryExecution",
-        "athena:StopQueryExecution",
-        "athena:GetQueryResults",
-        "athena:ListQueryExecutions",
-        "athena:BatchGetQueryExecution"
-      ],
-      "Resource": "arn:aws:athena:REGION:ACCT:workgroup/WORKGROUP" },
-    { "Effect": "Allow",
-      "Action": ["glue:GetDatabases", "glue:GetTables", "glue:GetTable"],
-      "Resource": "*" },
-    { "Effect": "Allow",
-      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"],
-      "Resource": [
-        "arn:aws:s3:::DATA-BUCKET",
-        "arn:aws:s3:::DATA-BUCKET/*"
-      ] },
-    { "Effect": "Allow",
-      "Action": "s3:GetObject",
-      "Resource": "arn:aws:s3:::ATHENA-RESULTS-BUCKET/*" }
-  ]
-}
-```
-
-**After [#2](https://github.com/chris-arsenault/athena-s3-web-shell/issues/2) lands**, the task role shrinks to only `sts:AssumeRoleWithWebIdentity` against the per-user role ARNs; user roles carry the policies above scoped to that user's prefix.
-
-### 9.4 Required VPC endpoints
-
-All as **interface endpoints with private DNS enabled**, except S3 which is a **gateway endpoint**:
-
-| Service | Type | Why |
-|---|---|---|
-| S3 | gateway | data bucket, Athena results bucket, ECR layers |
-| Athena | interface | query lifecycle |
-| Glue | interface | catalog browse |
-| STS | interface | (post-#2) AssumeRoleWithWebIdentity, plus current Cognito Identity Pool exchange |
-| Logs (CloudWatch) | interface | container logs |
-| ECR API + DKR | interface | image pulls (ECR is not internet-reachable from inside the VPC) |
-| Secrets Manager | interface | future Cognito client secret, JWKS cache config |
-| SSM | interface | runtime config |
-| KMS | interface | only if data buckets use SSE-KMS |
-| Cognito IDP + Cognito Identity | interface | future ([#1](https://github.com/chris-arsenault/athena-s3-web-shell/issues/1)) |
-
-Bucket policies must restrict to `aws:SourceVpce` matching the S3 endpoint.
-
-### 9.5 S3 CORS (browser-direct uploads)
-
-The data bucket needs CORS so the SPA can `PUT` to it:
-
-```jsonc
-[
-  {
-    "AllowedOrigins": ["https://internal-alb-hostname"],
-    "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
-    "AllowedHeaders": ["*"],
-    "ExposeHeaders": ["ETag"],
-    "MaxAgeSeconds": 3000
-  }
-]
-```
-
-This is set outside this repo (Terraform/CloudFormation in your deployment repo). Without it, multipart uploads from the SPA will fail at the browser preflight.
-
-### 9.6 Multipart abort lifecycle
-
-```jsonc
-{
-  "Rules": [
-    {
-      "ID": "abort-orphan-multipart",
-      "Status": "Enabled",
-      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 1 }
-    }
-  ]
-}
-```
-
-Without this, abandoned multipart uploads (browser tab closed mid-upload) accumulate as billed storage forever.
-
----
-
-## 10. Security model
-
-### 10.1 Layers of defense
-
-In order from outermost to innermost:
-
-1. **Network**: ALB internal-only, security group restricts ingress, no public IP on the task.
-2. **Auth**: SPA cannot reach `/api` without an auth header (mock or JWT). Healthcheck is the only unauthenticated route.
-3. **App-level scoping**: `req.user.s3.prefix` and `req.user.athena.workgroup` are passed into every AWS call. Path-traversal guard (`isWithinPrefix`) on every S3 op.
-4. **IAM**: today the task role's policy bounds what's possible; post-[#2](https://github.com/chris-arsenault/athena-s3-web-shell/issues/2), per-user role policies do.
-5. **Bucket policy**: restricts to `aws:SourceVpce`, blocks public access.
-6. **Audit**: structured JSON audit events on every Athena / Glue / datasets route (see §10.3).
-
-### 10.2 Things to remember
-
-- **Browser-visible STS creds are not a vulnerability** when scoped tightly and short-lived. They are visible in DevTools — that's expected. The IAM policy is what makes them safe.
-- **Don't trust SPA-side prefix checks alone.** They're UX guardrails (better error messages, fewer accidental clicks). The IAM role is the actual enforcement.
-- **SQL queries are user-typed.** Athena handles parameter binding only via parameterized queries; we don't enforce parameterization. Workgroup data-scanned limits are the safety net for accidental full-table scans on huge tables.
-- **CSV download is presigned to S3 directly** so multi-GB results don't pass through proxy memory.
-
-### 10.3 Audit
-
-Two layers, one per direction of data flow:
-
-- **Proxy audit** — `packages/proxy/src/services/audit.ts` emits structured JSON events for every query lifecycle transition (`query.start` / `end` / `stop` / `results` / `download`) and dataset operation (`datasets.infer` / `create_table`). Events carry `requestId`, `user.{id,name,email}`, `sourceIp`, `outcome`, and per-event attrs. SQL is **never** logged literally — each `query.start` carries a redacted `sqlFingerprint` (string + numeric literals collapsed, comments stripped) and a `sqlHash` (16-char sha256 of the fingerprint). Written to stdout → ECS `awslogs` → `/ecs/athena-shell-proxy` CloudWatch group. Filter on `{ $.kind = "audit" }`.
-- **S3 data-event audit** — CloudTrail (see `infrastructure/terraform/cloudtrail.tf`) captures every object-level S3 operation against the data + results buckets, tagged with the caller's IAM role (the per-user role the Identity Pool vends to the browser). Since browser-direct S3 never hits the proxy, CloudTrail is the authoritative source. Lands in `athena-shell-cloudtrail-<acct>` under `AWSLogs/<acct>/CloudTrail/…`; query via Athena over the bucket.
-
-Tamper-evidence: the ECS task role has `logs:PutLogEvents` only (no delete, no retention-policy mutation). The CloudTrail bucket has versioning + block-public-access + log file validation. Neither the task role nor per-user roles can modify either destination.
-
-`requestId` is generated by the proxy's `middleware/requestId.ts` (or accepts an inbound `X-Request-Id` header), surfaced as a response header, prefixed into every morgan HTTP log line, and stamped on every audit event — so an auditor has one token to pivot between HTTP access logs and the audit stream.
-
-Full schema + sample CloudWatch Logs Insights queries: [docs/audit-schema.md](audit-schema.md).
-
----
-
-## 11. Extension points
-
-### 11.1 Adding a new proxy endpoint
-
-1. New file `packages/proxy/src/routes/<topic>.ts`. Use existing routes as templates — `Router()`, `asyncHandler` wrapping handlers, AWS clients constructed at the top.
-2. Register in `server.ts` under the `apiAuth` router.
-3. AWS-side logic goes in `services/<topic>Service.ts`. Routes parse HTTP; services do the AWS work.
-4. New shared types go in `packages/shared/src/types/<topic>.ts` and re-export from `index.ts`.
-5. SPA repo wrapper in `packages/web/src/data/<topic>Repo.ts` with the standard `if (provider.isMock()) return mockX(); else return apiCall();` shape.
-6. Extend the mock fakes in `data/mockS3Store.ts` or `data/mockAthena.ts` so dev mode keeps working.
-7. Tests: route via supertest in proxy, repo via vitest in web (mock the api wrapper or the provider).
-
-### 11.2 Adding a new SPA view
-
-1. `packages/web/src/views/<area>/<View>.tsx` + `.css` + `.test.tsx`.
-2. Use existing views as templates — `useAuth()` for context, repos for data, hooks for state machines, `ErrorBanner` for errors, `LoadingSpinner` for loading.
-3. Register in `routes.tsx`.
-4. Add a nav link in `components/AppShell.tsx` if it should appear in the sidebar.
-5. Keep the component under 75 lines (lint cap). Extract sub-components and hooks aggressively.
-
-### 11.3 Adding a new shared type
-Just add the file, export from `index.ts`. The proxy and web both consume `@athena-shell/shared` as a workspace dep. **Rebuild shared** (`pnpm --filter @athena-shell/shared build`) for the proxy to see it at runtime; in dev the watch script handles this.
-
-### 11.4 Replacing the AuthProvider
-Implement the interface, instantiate it in `App.tsx` (web) and `middleware/authenticate.ts` (proxy). Both implementations must agree on the `AuthContext` shape they produce. Drive the choice from env (e.g., `AUTH_PROVIDER=cognito|mock`).
-
----
-
-## 12. Testing posture
-
-Vitest only (lint enforces). What's covered:
-
-- **Pure utils**: every `utils/*.ts` has a `.test.ts`
-- **IndexedDB layer**: `localDb.test.ts` runs against `fake-indexeddb`
-- **Proxy routes**: `server.test.ts` boots `createServer({mockAuth: true})` and hits routes via supertest
-- **Service mappers**: where there's non-trivial AWS-shape → our-shape translation
-
-Not covered:
-- Real AWS SDK calls (covered by future integration smoke tests against a sandbox account)
-- Monaco render
-- Drag-drop DOM events
-- React snapshot tests (intentional — they rot fast)
-
-Run a single test file: `cd packages/web && pnpm vitest run src/utils/parseS3Path.test.ts`.
-
----
-
-## 13. Performance
-
-### 13.1 Bundle
-- Main SPA bundle: ~175 KB gzipped
-- Monaco lazy chunk: ~856 KB gzipped (loads only on `/query`)
-- Per-language chunks: ~3-15 KB each (Monaco loads them on demand)
-
-If main bundle starts climbing past 300 KB, audit imports. The usual suspect is something accidentally importing from `monaco-editor` outside the lazy boundary.
-
-### 13.2 Proxy memory
-Stays flat under all current operations because:
-- Athena results paginate (1000 rows max per `GetQueryResults`)
-- Athena CSV downloads are presigned, not streamed through proxy
-- Glue catalog responses are small
-- S3 ops don't touch the proxy at all
-
-If you add an endpoint that returns more than ~1 MB of body, think hard about streaming or presigning instead.
-
-### 13.3 Known cliffs
-- ResultsTable with >5000 DOM rows starts to feel sluggish. Virtualization is in [#4](https://github.com/chris-arsenault/athena-s3-web-shell/issues/4).
-- Polling at 1Hz is fine for a single user; with 100 concurrent users running queries, the proxy makes 100 RPS to Athena which can hit account-level rate limits. Consider exponential backoff or server-side polling consolidation if this becomes real.
-
----
-
-## 14. Roadmap
-
-Backlog tracked as GitHub issues:
-
-| Issue | Why it matters |
+| Service | Type |
 |---|---|
-| [#1](https://github.com/chris-arsenault/athena-s3-web-shell/issues/1) Cognito + Entra federation | The actual auth — without this it's a demo |
-| [#2](https://github.com/chris-arsenault/athena-s3-web-shell/issues/2) AssumeRoleWithWebIdentity per request | Move enforcement from app code to IAM |
-| [#3](https://github.com/chris-arsenault/athena-s3-web-shell/issues/3) Audit logging | Compliance requirement in regulated environments |
-| [#4](https://github.com/chris-arsenault/athena-s3-web-shell/issues/4) Result streaming + virtualized table | Handle real-world large result sets |
-| [#5](https://github.com/chris-arsenault/athena-s3-web-shell/issues/5) S3 → Athena table auto-creation | Closes the "drop a file, query it" loop the product is named for |
+| S3 | gateway |
+| Athena | interface |
+| Glue | interface |
+| STS | interface |
+| CloudWatch Logs | interface |
+| ECR API + DKR | interface |
+| Secrets Manager, SSM, KMS | interface (as needed) |
+| Cognito IDP + Cognito Identity | interface |
 
-Out of scope and **not currently tracked**: query sharing/versioning, charting, mobile layouts, i18n, theme toggle, Glue crawlers, cost warnings.
+Bucket policies restrict to `aws:SourceVpce` matching the S3 endpoint.
 
----
+### S3 CORS (browser-direct uploads)
 
-## 15. Decisions log (the "why" register)
+```jsonc
+{
+  "AllowedOrigins": ["https://<internal-alb-hostname>"],
+  "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
+  "AllowedHeaders": ["*"],
+  "ExposeHeaders": ["ETag"],
+  "MaxAgeSeconds": 3000
+}
+```
 
-The non-obvious choices, in case you wonder why something is the way it is:
+Without this, browser-side multipart uploads fail at the preflight.
+
+### Multipart abort lifecycle
+
+```jsonc
+{
+  "ID": "abort-orphan-multipart",
+  "Status": "Enabled",
+  "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 1 }
+}
+```
+
+Without this, tabs closed mid-upload leave billed parts around forever.
+
+## Security model
+
+Layers, outermost to innermost:
+
+1. **Network** — internal-only ALB, security group restricts ingress, no public IP on the task.
+2. **Auth** — ALB `jwt-validation` rejects unauthenticated `/api/*` at the edge. Healthcheck is the only unauthenticated route.
+3. **Credential passthrough** — every AWS call the proxy makes carries the caller's STS creds. The proxy task role holds nothing.
+4. **IAM** — per-user roles (`infrastructure/terraform/iam-user-roles.tf`) bound to what each user can do.
+5. **Bucket policy** — `aws:SourceVpce` restriction + block-public-access.
+6. **Audit** — structured JSON events per proxy call + CloudTrail data events on S3. See [audit-schema.md](audit-schema.md).
+
+Things to remember:
+
+- **Browser-visible STS creds are not a vulnerability** when scoped tightly and short-lived. They are visible in DevTools — that's expected. The per-user IAM role is what makes them safe.
+- **SPA-side prefix checks are UX guardrails.** IAM is the actual enforcement.
+- **SQL is user-typed.** Workgroup `bytes_scanned_cutoff` is the safety net for accidental full-table scans.
+- **CSV download is presigned direct-to-S3** so multi-GB results don't pass through proxy memory.
+
+## Decisions log
+
+Non-obvious choices, in case you wonder why:
 
 | Decision | Rationale |
 |---|---|
-| Hybrid AWS access (S3 direct, Athena via proxy) | Multi-GB browser→S3 uploads/downloads can't go through proxy memory. Athena/Glue go through proxy so workgroup config and result presigning live in one place. |
-| Single Fargate task serving SPA + API | VPC-bound deployments forbid CloudFront. S3+ALB-static was considered and rejected as more plumbing for no real benefit. |
-| Express, not Hono/Fastify | Mature, widely understood — easier to get past security review and onboard contributors. |
-| Monaco, not CodeMirror | Matches DBeaver polish users expect. The bundle penalty is acceptable because it's lazy-loaded. |
-| Plain CSS, not CSS modules / styled-components | Simpler bundle, simpler debugging, no runtime dep, no build complexity. |
-| pnpm workspaces, not turbo/nx | Three packages don't justify a build orchestrator. pnpm's recursive runner is enough. |
+| Hybrid AWS access (S3 direct, Athena via proxy) | Multi-GB browser↔S3 transfers can't go through proxy memory. Athena/Glue go through the proxy so workgroup config and result presigning live in one place. |
+| Single Fargate task serving SPA + API | VPC-bound deployments forbid CloudFront. S3+ALB-static was considered — more plumbing for no real benefit. |
+| Credential passthrough instead of per-request AssumeRoleWithWebIdentity | Simpler: the browser already holds STS creds from the Identity Pool; we forward them instead of re-minting. One source of truth for the caller's IAM identity across all AWS calls. |
+| Unified shell — `/workspace` + `/query` are URL aliases, not separate views | Tabs differentiate content kind (SQL vs. browser). One chrome, one tab strip, one sidebar. Routes just seed the right tab kind on mount. |
+| Express, not Hono / Fastify | Mature, widely understood — easier for security review and contributor onboarding. |
+| Monaco, not CodeMirror | Matches DBeaver polish users expect. Bundle penalty acceptable because lazy-loaded. |
+| Plain CSS, not CSS modules / styled-components | Simpler bundle, simpler debugging, no runtime dep. |
+| pnpm workspaces, not turbo / nx | Three packages don't justify a build orchestrator. |
 | Vite 5, not 6 | Vitest 2.x ships vite 5; mixing breaks plugin types. |
-| Mock everything in dev | Contributors may not have AWS sandbox access (common in restricted-network shops). The mock layer is intentional, not a stopgap. |
-| IndexedDB for query history (merged with Athena) | Local favorites survive Athena's 45-day retention. No backend state to manage. |
-| `AuthProvider` interface from day one | The Cognito work is large; we wanted to ship the shell while it's deferred. The abstraction is the only way to swap providers cleanly later. |
-| Per-request `AssumeRoleWithWebIdentity` deferred | Requires Cognito to be wired first, and the v1 task-role-with-app-side-scoping is acceptable for a closed pilot. |
+| Mock everything in dev | Contributors may lack AWS sandbox access (common in restricted-network shops). The mock layer is intentional. |
+| IndexedDB for tabs + favorites | Local state survives Athena's 45-day retention. No backend state to manage. |
+| `AuthProvider` interface from day one | Cognito was deferred past v1; the abstraction shipped the shell while it was deferred, and the demo auth later dropped in cleanly. |
+| LazySimpleSerDe as the CSV default | OpenCSVSerde can't parse native DATE/TIMESTAMP — requires UNIX numeric form. LazySimple handles ISO dates out of the box. OpenCSVSerde is opt-in for CSVs with quoted-delimiter fields. |
+| react-resizable-panels v2 | Canonical `PanelGroup` / `Panel` / `PanelResizeHandle` API; v4 changed both names and semantics, and we value the larger tutorial / Q&A surface that v2 has. |
