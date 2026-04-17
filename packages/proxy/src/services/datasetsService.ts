@@ -1,5 +1,10 @@
-import { GetObjectCommand, type S3Client } from "@aws-sdk/client-s3";
+import {
+  GetObjectCommand,
+  HeadObjectCommand,
+  type S3Client,
+} from "@aws-sdk/client-s3";
 import { type AthenaClient } from "@aws-sdk/client-athena";
+import { parquetMetadataAsync } from "hyparquet";
 
 import type {
   AthenaScope,
@@ -15,6 +20,11 @@ import {
   ddlForRequest,
   sanitizeIdent,
 } from "./ddlTemplates.js";
+import {
+  inferJsonSchema,
+  inferJsonlSchema,
+  parquetSchemaToColumns,
+} from "./schemaInference.js";
 import { startQuery, getQuery } from "./queryService.js";
 
 const DEFAULT_SAMPLE_BYTES = 65536;
@@ -29,14 +39,61 @@ export async function inferSchema(
   fileType: DatasetFileType,
   sampleBytes: number = DEFAULT_SAMPLE_BYTES
 ): Promise<InferSchemaResponse> {
-  if (fileType !== "csv" && fileType !== "tsv") {
-    // JSON/Parquet inference is out of v1 scope — return empty so the UI
-    // can let the user fill in columns manually.
-    return { columns: [], hasHeader: false };
+  if (fileType === "csv" || fileType === "tsv") {
+    const text = await fetchSample(s3, bucket, key, sampleBytes);
+    const delimiter = fileType === "tsv" ? "\t" : ",";
+    return inferCsvSchema(text, delimiter);
   }
-  const text = await fetchSample(s3, bucket, key, sampleBytes);
-  const delimiter = fileType === "tsv" ? "\t" : ",";
-  return inferCsvSchema(text, delimiter);
+  if (fileType === "jsonl") {
+    const text = await fetchSample(s3, bucket, key, sampleBytes);
+    return { columns: inferJsonlSchema(text, SAMPLE_DATA_ROWS), hasHeader: false };
+  }
+  if (fileType === "json") {
+    const text = await fetchSample(s3, bucket, key, sampleBytes);
+    return { columns: inferJsonSchema(text, SAMPLE_DATA_ROWS), hasHeader: false };
+  }
+  if (fileType === "parquet") {
+    const columns = await inferParquetSchema(s3, bucket, key);
+    return { columns, hasHeader: false };
+  }
+  return { columns: [], hasHeader: false };
+}
+
+async function inferParquetSchema(
+  s3: S3Client,
+  bucket: string,
+  key: string
+): Promise<DatasetColumn[]> {
+  const head = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+  const byteLength = head.ContentLength ?? 0;
+  if (!byteLength) throw new Error(`parquet object has no content-length: ${key}`);
+  const asyncBuffer = {
+    byteLength,
+    async slice(start: number, end: number = byteLength): Promise<ArrayBuffer> {
+      return getObjectRangeBuffer(s3, bucket, key, start, end);
+    },
+  };
+  const md = await parquetMetadataAsync(asyncBuffer);
+  return parquetSchemaToColumns(md.schema);
+}
+
+async function getObjectRangeBuffer(
+  s3: S3Client,
+  bucket: string,
+  key: string,
+  start: number,
+  endExclusive: number
+): Promise<ArrayBuffer> {
+  const out = await s3.send(
+    new GetObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Range: `bytes=${start}-${endExclusive - 1}`,
+    })
+  );
+  if (!out.Body) throw new Error(`No body on range get for s3://${bucket}/${key}`);
+  const arr = await out.Body.transformToByteArray();
+  return arr.buffer.slice(arr.byteOffset, arr.byteOffset + arr.byteLength) as ArrayBuffer;
 }
 
 export async function createTable(
