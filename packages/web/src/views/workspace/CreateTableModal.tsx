@@ -12,6 +12,7 @@ import type { AuthProvider } from "../../auth/AuthProvider";
 import { useAuth } from "../../auth/authContext";
 import { createTable, inferSchema } from "../../data/datasetsRepo";
 import { getQuery } from "../../data/queryRepo";
+import { copyObject } from "../../data/s3Repo";
 import { useSchema } from "../../data/schemaContext";
 import "./CreateTableModal.css";
 
@@ -45,32 +46,31 @@ export function CreateTableModal({ file, fileType, onClose, onCreated }: Props) 
   }, [creating, onClose]);
 
   if (!context) return null;
-  const location = `s3://${context.s3.bucket}/${folderOf(file.key)}`;
   const database = context.athena.userDatabase ?? "workspace_unknown";
+  // Each table gets its own isolated subdir under <prefix>/datasets/.
+  // Athena's LOCATION is a directory and reads EVERY file in it — if we
+  // pointed at the source file's parent we'd read sibling files too
+  // (e.g. a CSV table choking on a neighbor .json). The modal preview
+  // shows the final isolated location so there's no surprise.
+  const tableDir = `datasets/${sanitizeDirSlug(tableName)}/`;
+  const location = `s3://${context.s3.bucket}/${context.s3.prefix}${tableDir}`;
 
-  const onCreate = async () => {
-    setError(null);
-    setCreating(true);
-    try {
-      const { executionId } = await createTable(provider, {
-        database,
-        table: tableName,
-        location,
-        fileType,
-        columns,
-        skipHeader: true,
-      });
-      await pollDdl(provider, executionId);
-      // Pull the new table into the shared SchemaProvider cache so
-      // crosslinks + the schema tree pick it up without a page reload.
-      await schema.refresh();
-      onCreated();
-    } catch (e) {
-      setError(e as Error);
-    } finally {
-      setCreating(false);
-    }
-  };
+  const onCreate = () =>
+    runCreate({
+      provider,
+      context,
+      file,
+      fileType,
+      database,
+      table: tableName,
+      columns,
+      tableDir,
+      location,
+      schema,
+      setCreating,
+      setError,
+      onCreated,
+    });
 
   return (
     <div className="ct-backdrop">
@@ -297,6 +297,63 @@ const TYPES = [
   "timestamp",
 ];
 
+interface RunCreateArgs {
+  provider: AuthProvider;
+  context: AuthContext;
+  file: S3Object;
+  fileType: DatasetFileType;
+  database: string;
+  table: string;
+  columns: DatasetColumn[];
+  tableDir: string;
+  location: string;
+  schema: ReturnType<typeof useSchema>;
+  setCreating: (b: boolean) => void;
+  setError: (e: Error | null) => void;
+  onCreated: () => void;
+}
+
+async function runCreate(args: RunCreateArgs): Promise<void> {
+  const {
+    provider,
+    context,
+    file,
+    fileType,
+    database,
+    table,
+    columns,
+    tableDir,
+    location,
+    schema,
+    setCreating,
+    setError,
+    onCreated,
+  } = args;
+  setError(null);
+  setCreating(true);
+  try {
+    const targetKey = `${context.s3.prefix}${tableDir}${file.name}`;
+    if (file.key !== targetKey) {
+      await copyObject(provider, context, file.key, targetKey);
+    }
+    const { executionId } = await createTable(provider, {
+      database,
+      table,
+      location,
+      fileType,
+      columns,
+      skipHeader: true,
+    });
+    await pollDdl(provider, executionId);
+    await schema.refresh();
+    onCreated();
+  } catch (e) {
+    setError(e as Error);
+  } finally {
+    setCreating(false);
+  }
+}
+
 async function pollDdl(provider: AuthProvider, executionId: string): Promise<void> {
   const deadline = Date.now() + 60_000;
   for (;;) {
@@ -319,7 +376,8 @@ function defaultTableName(fileName: string): string {
   return /^[0-9]/.test(cleaned) ? `_${cleaned}` : cleaned;
 }
 
-function folderOf(key: string): string {
-  const idx = key.lastIndexOf("/");
-  return idx === -1 ? "" : key.slice(0, idx + 1);
+function sanitizeDirSlug(raw: string): string {
+  const slug = raw.toLowerCase().replace(/[^a-z0-9_]/g, "_");
+  if (!slug) return "dataset";
+  return /^[0-9]/.test(slug) ? `_${slug}` : slug;
 }

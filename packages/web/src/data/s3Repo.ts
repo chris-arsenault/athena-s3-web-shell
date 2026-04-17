@@ -1,4 +1,5 @@
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   ListObjectsV2Command,
@@ -289,6 +290,29 @@ function parseContentRangeTotal(header?: string): number | null {
   if (!header) return null;
   const m = /\/(\d+)\s*$/.exec(header);
   return m ? Number.parseInt(m[1]!, 10) : null;
+}
+
+export async function copyObject(
+  provider: AuthProvider,
+  ctx: AuthContext,
+  sourceKey: string,
+  targetKey: string
+): Promise<void> {
+  ensureScoped(ctx, sourceKey);
+  ensureScoped(ctx, targetKey);
+  if (provider.isMock()) {
+    mockS3.copy(sourceKey, targetKey);
+    return;
+  }
+  const client = clientFor(provider, ctx);
+  await client.send(
+    new CopyObjectCommand({
+      Bucket: ctx.s3.bucket,
+      Key: targetKey,
+      CopySource: `${ctx.s3.bucket}/${encodeURIComponent(sourceKey)}`,
+      MetadataDirective: "COPY",
+    })
+  );
 }
 
 export async function createFolder(

@@ -69,6 +69,11 @@ function QueryViewInner() {
   const onSelectHistory = (e: HistoryEntry) => {
     activeHandleRef.current?.replaceSql(e.sql);
   };
+  const onPeekTable = (db: string, table: string) => {
+    activeHandleRef.current?.runSql(
+      `SELECT * FROM \`${db}\`.\`${table}\` LIMIT 10`
+    );
+  };
   const onOpenScratchpad = async (key: string, name: string) => {
     const { content, etag } = await readScratchpad(provider, context, key);
     tabsApi.openScratchpad(key, name, content, etag);
@@ -77,7 +82,7 @@ function QueryViewInner() {
   return (
     <div className="query-view flex-row flex-1">
       <aside className="query-side flex-col">
-        <SchemaTree />
+        <SchemaTree onPeekTable={onPeekTable} />
         <SavedQueriesPanel
           refreshKey={savedKey}
           onPick={onPickSaved}

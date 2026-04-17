@@ -11,10 +11,27 @@ import "./SchemaTree.css";
 
 const NO_TABLES: TableRef[] = [];
 
-export function SchemaTree() {
+interface SchemaTreeProps {
+  onPeekTable?: (db: string, table: string) => void;
+}
+
+export function SchemaTree({ onPeekTable }: SchemaTreeProps = {}) {
   const schema = useSchema();
+  const { context } = useAuth();
   const [openDb, setOpenDb] = useState<string | null>(null);
   const [openTable, setOpenTable] = useState<string | null>(null);
+
+  // Auto-expand the user's workspace DB on first sight — their tables
+  // are what they're almost certainly looking for, so saving the click
+  // to open the right DB is the right default.
+  const userDb = context?.athena.userDatabase;
+  if (schema.databases && userDb && openDb === null) {
+    const hasUserDb = schema.databases.some((d) => d.name === userDb);
+    if (hasUserDb) {
+      setOpenDb(userDb);
+      void schema.loadTables(userDb);
+    }
+  }
 
   const toggleDb = async (name: string) => {
     if (openDb === name) return setOpenDb(null);
@@ -52,6 +69,7 @@ export function SchemaTree() {
             openTableKey={openTable}
             columnsByTable={schema.columnsByTable}
             onToggleTable={toggleTable}
+            onPeekTable={onPeekTable}
           />
         ))}
       </ul>
@@ -68,6 +86,7 @@ interface DbItemProps {
   openTableKey: string | null;
   columnsByTable: Record<string, Column[]>;
   onToggleTable: (db: string, name: string) => void;
+  onPeekTable?: (db: string, name: string) => void;
 }
 
 function DbItem(p: DbItemProps) {
@@ -95,6 +114,7 @@ function DbItem(p: DbItemProps) {
                 open={p.openTableKey === k}
                 columns={p.columnsByTable[k]}
                 onToggle={() => p.onToggleTable(p.db.name, t.name)}
+                onPeek={p.onPeekTable}
               />
             );
           })}
@@ -110,20 +130,35 @@ interface TblItemProps {
   open: boolean;
   columns?: Column[];
   onToggle: () => void;
+  onPeek?: (db: string, name: string) => void;
 }
 
-function TblItem({ db, table, open, columns, onToggle }: TblItemProps) {
+function TblItem({ db, table, open, columns, onToggle, onPeek }: TblItemProps) {
   return (
     <li>
       <div className={`tree-row tree-tbl-row ${open ? "is-open" : ""}`}>
         <button
           className="tree-row-pick"
           onClick={onToggle}
+          onDoubleClick={() => onPeek?.(db, table.name)}
           data-testid={`tree-tbl-${db}-${table.name}`}
+          title="Click to expand columns · double-click to peek (SELECT * LIMIT 10)"
         >
           <span className="tree-caret">{open ? "▾" : "▸"}</span>
           <span className="tree-kind tree-kind-tbl">▤</span>
           <span className="truncate tree-name">{table.name}</span>
+        </button>
+        <button
+          className="tree-peek"
+          onClick={(e) => {
+            e.stopPropagation();
+            onPeek?.(db, table.name);
+          }}
+          aria-label={`Peek ${db}.${table.name}`}
+          title={`Peek: SELECT * FROM ${db}.${table.name} LIMIT 10`}
+          data-testid={`tree-peek-${db}-${table.name}`}
+        >
+          ▶
         </button>
         <WorkspaceLink table={table} />
       </div>

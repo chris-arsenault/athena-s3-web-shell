@@ -37,8 +37,10 @@ export function useSchema(): SchemaValue {
   return v;
 }
 
+const CRAWL_CONCURRENCY = 4;
+
 function useSchemaState(): SchemaValue {
-  const { provider } = useAuth();
+  const { provider, context } = useAuth();
   const [databases, setDatabases] = useState<DatabaseRef[] | null>(null);
   const [tablesByDb, setTablesByDb] = useState<Record<string, TableRef[]>>({});
   const [columnsByTable, setColumnsByTable] = useState<Record<string, Column[]>>({});
@@ -102,5 +104,43 @@ function useSchemaState(): SchemaValue {
     [provider]
   );
 
+  // Background crawl: once databases + tables are loaded, pre-warm
+  // columns for every table in the user's workspace DB so autocomplete
+  // responds without a per-table round-trip. Concurrency-capped so
+  // GetTable calls don't stampede Glue. Silent on errors — the lazy
+  // loadColumns path still works, this just saves a click.
+  const userDb = context?.athena.userDatabase;
+  const userDbTables = userDb ? tablesByDb[userDb] : undefined;
+  useEffect(() => {
+    if (!userDb || !userDbTables) return;
+    const tok = { cancelled: false };
+    void crawlColumns(tok, provider, userDb, userDbTables, loadColumns);
+    return () => {
+      tok.cancelled = true;
+    };
+  }, [provider, userDb, userDbTables, loadColumns]);
+
   return { databases, tablesByDb, columnsByTable, loadTables, loadColumns, refresh };
+}
+
+async function crawlColumns(
+  tok: { cancelled: boolean },
+  _provider: unknown,
+  db: string,
+  tables: readonly TableRef[],
+  loadColumns: (db: string, table: string) => Promise<Column[]>
+): Promise<void> {
+  const queue = [...tables];
+  const workers = Array.from({ length: Math.min(CRAWL_CONCURRENCY, queue.length) }, async () => {
+    while (!tok.cancelled) {
+      const next = queue.shift();
+      if (!next) return;
+      try {
+        await loadColumns(db, next.name);
+      } catch {
+        // Let lazy-on-click retry; don't let one bad table kill the crawl.
+      }
+    }
+  });
+  await Promise.all(workers);
 }

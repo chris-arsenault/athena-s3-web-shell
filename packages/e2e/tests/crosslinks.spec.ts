@@ -36,22 +36,18 @@ test("schema → workspace: table with LOCATION inside user prefix shows ⇡ lin
   await registerTableFromSalesCsv(page);
 
   await page.getByTestId("nav-link-query").click();
-  await expect(page).toHaveURL(/\/query$/);
+  await expect(page).toHaveURL(/\/query/);
 
-  // Expand workspace_dev_user and find the newly-created sales_2025 table.
-  const userDb = page.getByTestId("tree-db-workspace_dev_user");
-  await expect(userDb).toBeVisible({ timeout: 10_000 });
-  await userDb.click();
-
-  // The crosslink appears on the table row.
+  // workspace_dev_user now auto-expands on mount — no need to click it
+  // to reveal the sales_2025 table.
   const link = page.getByTestId(
     "tree-link-workspace-workspace_dev_user-sales_2025"
   );
-  await expect(link).toBeAttached();
+  await expect(link).toBeAttached({ timeout: 10_000 });
 
   await link.click();
-  // Lands on /workspace with the backing prefix.
-  await expect(page).toHaveURL(/\/workspace.*sample-data/);
+  // Lands on /workspace with the table's isolated subdir as the prefix.
+  await expect(page).toHaveURL(/\/workspace.*datasets.*sales_2025/);
 });
 
 test("workspace → query: ⌕ opens a NEW tab so an in-flight draft isn't clobbered", async ({
@@ -75,10 +71,22 @@ test("workspace → query: ⌕ opens a NEW tab so an in-flight draft isn't clobb
   await page.waitForTimeout(800);
   const tabCountBefore = await page.locator(".tabstrip-item").count();
 
-  // Back to workspace, click ⌕ on the CSV.
+  // Back to workspace (SPA nav preserves the in-memory mockS3 state
+  // where the copied CSV lives). Reset to prefix root via the
+  // breadcrumb, then drill into the table's isolated subdir and
+  // click ⌕ on the CSV row.
   await page.getByTestId("nav-link-workspace").click();
+  await page.locator(".crumb-root").click();
+  await page
+    .locator(".fb-folder")
+    .filter({ hasText: /datasets\// })
+    .click();
+  await page
+    .locator(".fb-folder")
+    .filter({ hasText: /sales_2025\// })
+    .click();
   const queryLink = page.getByTestId(
-    "fb-link-query-users/dev/sample-data/sales-2025.csv"
+    "fb-link-query-users/dev/datasets/sales_2025/sales-2025.csv"
   );
   await expect(queryLink).toBeVisible({ timeout: 5_000 });
   await queryLink.click();

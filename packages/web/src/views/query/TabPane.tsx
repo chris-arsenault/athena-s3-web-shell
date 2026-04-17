@@ -15,6 +15,11 @@ import { SqlEditor } from "./SqlEditor";
 
 export interface ActiveTabHandle {
   replaceSql: (sql: string) => void;
+  /** Run a one-off statement through this tab's run queue without
+   *  touching the editor buffer. Used for the schema-tree double-
+   *  click "peek" — the user's current SQL stays as-is, results
+   *  show under the active tab. */
+  runSql: (sql: string) => void;
 }
 
 export type ActiveHandleSlot = { current: ActiveTabHandle | null };
@@ -39,7 +44,8 @@ export function TabPane(props: Props) {
   const [saveError, setSaveError] = useState<string | null>(null);
   const cursorOffsetRef = useRef<number>(0);
   useTabSync(s, tab, onPatch);
-  useActiveHandleRegistration(hidden, s.replaceSql, props.activeHandleRef);
+  const runSqlPeek = useCallback((sql: string) => s.runQueue.runAll([sql]), [s.runQueue]);
+  useActiveHandleRegistration(hidden, s.replaceSql, runSqlPeek, props.activeHandleRef);
   const onScratchpadSave = useScratchpadSave(tab, s, onPatch, setSaveError, props.onScratchpadSaved);
   const onSaved = useCallback(() => {
     s.setSaveOpen(false);
@@ -131,16 +137,17 @@ function useTabSync(
 function useActiveHandleRegistration(
   hidden: boolean,
   replaceSql: (sql: string) => void,
+  runSql: (sql: string) => void,
   handleRef: ActiveHandleSlot
 ): void {
   useEffect(() => {
     if (hidden) return;
-    const handle: ActiveTabHandle = { replaceSql };
+    const handle: ActiveTabHandle = { replaceSql, runSql };
     handleRef.current = handle;
     return () => {
       if (handleRef.current === handle) handleRef.current = null;
     };
-  }, [hidden, replaceSql, handleRef]);
+  }, [hidden, replaceSql, runSql, handleRef]);
 }
 
 function useScratchpadSave(

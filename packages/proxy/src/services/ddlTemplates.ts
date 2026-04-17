@@ -48,11 +48,16 @@ LOCATION '${normLoc}'`;
 export function jsonTableDdl(req: CreateTableRequest): string {
   const cols = renderColumns(req.columns);
   const normLoc = normalizeLocation(req.location);
+  // OpenX JSON SerDe expects newline-delimited JSON (one object per line).
+  // `ignore.malformed.json` makes a bad line null out rather than killing
+  // the whole scan — matches Athena's recommended defaults.
   return `CREATE EXTERNAL TABLE IF NOT EXISTS \`${req.database}\`.\`${req.table}\` (
   ${cols}
 )
 ROW FORMAT SERDE 'org.openx.data.jsonserde.JsonSerDe'
-LOCATION '${normLoc}'`;
+WITH SERDEPROPERTIES ("ignore.malformed.json"="true", "dots.in.keys"="false", "case.insensitive"="true")
+LOCATION '${normLoc}'
+TBLPROPERTIES ("classification"="json")`;
 }
 
 export function ddlForRequest(req: CreateTableRequest): string {
