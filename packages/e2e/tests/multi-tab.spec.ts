@@ -70,6 +70,104 @@ test("rename persists the tab name across reload", async ({ page }) => {
   });
 });
 
+test("typing in two tabs and switching between them preserves each tab's SQL", async ({
+  page,
+}) => {
+  await freshPage(page, "/query");
+
+  // Seed tab A with a distinctive sentinel.
+  const activeEditor = () =>
+    page.locator(".query-main:not(.is-hidden) .sql-editor").first();
+  const activeLines = () =>
+    page.locator(".query-main:not(.is-hidden) .view-lines").first();
+
+  await expect(activeEditor()).toBeVisible();
+  await activeEditor().click();
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.press("Delete");
+  await page.keyboard.type("SELECT 'AAA_MARKER' AS a", { delay: 5 });
+  await expect(activeLines()).toContainText("AAA_MARKER");
+
+  // Open a second tab and write a different sentinel into it.
+  await page.getByTestId("tab-new").click();
+  await expect(page.locator(".tabstrip-item")).toHaveCount(2);
+  await expect(activeEditor()).toBeVisible({ timeout: 10_000 });
+  await activeEditor().click();
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.press("Delete");
+  await page.keyboard.type("SELECT 'BBB_MARKER' AS b", { delay: 5 });
+  await expect(activeLines()).toContainText("BBB_MARKER");
+
+  // Switch back to tab A — its AAA_MARKER must still be there, BBB
+  // must NOT have bled into A.
+  const tabs = page.locator(".tabstrip-item");
+  await tabs.first().getByTestId(/^tab-pick-/).click();
+  await expect(activeLines()).toContainText("AAA_MARKER");
+  await expect(activeLines()).not.toContainText("BBB_MARKER");
+
+  // Switch to tab B — the reverse assertion.
+  await tabs.nth(1).getByTestId(/^tab-pick-/).click();
+  await expect(activeLines()).toContainText("BBB_MARKER");
+  await expect(activeLines()).not.toContainText("AAA_MARKER");
+
+  // One more round trip to verify the preservation is stable across
+  // repeated swaps — guards against the stale-signal / re-fire bug
+  // where a second visit to a tab would clobber its content.
+  await tabs.first().getByTestId(/^tab-pick-/).click();
+  await expect(activeLines()).toContainText("AAA_MARKER");
+  await tabs.nth(1).getByTestId(/^tab-pick-/).click();
+  await expect(activeLines()).toContainText("BBB_MARKER");
+});
+
+test("picking a saved query hits the active tab and does NOT re-fire on tab switch", async ({
+  page,
+}) => {
+  await freshPage(page, "/query");
+
+  const activeEditor = () =>
+    page.locator(".query-main:not(.is-hidden) .sql-editor").first();
+  const activeLines = () =>
+    page.locator(".query-main:not(.is-hidden) .view-lines").first();
+  const tabs = page.locator(".tabstrip-item");
+
+  // Tab A: type a marker, save it as a named query, then EDIT the
+  // buffer to a different marker. This is the crucial part: tab A's
+  // current content (`A_EDITED`) is distinct from the saved query's
+  // content (`SAVED_Q`). If the stale-signal bug recurs, switching
+  // back to A after picking the saved query on B would clobber
+  // `A_EDITED` with `SAVED_Q`.
+  await activeEditor().click();
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.press("Delete");
+  await page.keyboard.type("SELECT 'SAVED_Q' AS x", { delay: 5 });
+  await page.getByTestId("qbtn-save").click();
+  const unique = `sq_${Date.now().toString(36)}`;
+  await page.getByTestId("sq-name-input").fill(unique);
+  await page.getByTestId("sq-save-btn").click();
+  await expect(page.getByTestId(`sq-row-${unique}`)).toBeVisible();
+
+  // Distinguish A's current content from the saved query.
+  await activeEditor().click();
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.press("Delete");
+  await page.keyboard.type("SELECT 'A_EDITED' AS x", { delay: 5 });
+
+  // Open tab B.
+  await page.getByTestId("tab-new").click();
+  await expect(activeLines()).not.toContainText("A_EDITED");
+  await expect(activeLines()).not.toContainText("SAVED_Q");
+
+  // Pick the saved query — active (B) should take SAVED_Q.
+  await page.getByTestId(`sq-row-${unique}`).getByRole("button").first().click();
+  await expect(activeLines()).toContainText("SAVED_Q", { timeout: 3_000 });
+
+  // Switch BACK to tab A. If the signal didn't leak, A still has
+  // A_EDITED. If it did leak (old bug), A would now show SAVED_Q.
+  await tabs.first().getByTestId(/^tab-pick-/).click();
+  await expect(activeLines()).toContainText("A_EDITED");
+  await expect(activeLines()).not.toContainText("SAVED_Q");
+});
+
 test("edited SQL persists across reload", async ({ page }) => {
   await freshPage(page, "/query");
   // With multi-tab, multiple tabpanes exist — scope editor lookups to

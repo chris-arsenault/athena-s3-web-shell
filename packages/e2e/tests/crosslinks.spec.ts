@@ -54,25 +54,47 @@ test("schema → workspace: table with LOCATION inside user prefix shows ⇡ lin
   await expect(page).toHaveURL(/\/workspace.*sample-data/);
 });
 
-test("workspace → query: file backing a known table shows ⌕ query link", async ({
+test("workspace → query: ⌕ opens a NEW tab so an in-flight draft isn't clobbered", async ({
   page,
 }) => {
-  // After registerTableFromSalesCsv we're still on /workspace/sample-data/
-  // — the file row should now show the ⌕ link because the sales_2025
-  // table's LOCATION covers this file. Don't do a full-page reload here:
-  // the mock's in-memory table registration wouldn't survive it.
   await registerTableFromSalesCsv(page);
 
+  // Hop to /query and seed the active tab with an in-flight marker.
+  await page.getByTestId("nav-link-query").click();
+  const activeEditor = () =>
+    page.locator(".query-main:not(.is-hidden) .sql-editor").first();
+  const activeLines = () =>
+    page.locator(".query-main:not(.is-hidden) .view-lines").first();
+  await activeEditor().click();
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.press("Delete");
+  await page.keyboard.type("SELECT 'WIP_DRAFT' AS x", { delay: 5 });
+  await expect(activeLines()).toContainText("WIP_DRAFT");
+  // Flush the 500ms debounced tab save before navigating away so the
+  // WIP_DRAFT content survives the QueryView unmount/remount cycle.
+  await page.waitForTimeout(800);
+  const tabCountBefore = await page.locator(".tabstrip-item").count();
+
+  // Back to workspace, click ⌕ on the CSV.
+  await page.getByTestId("nav-link-workspace").click();
   const queryLink = page.getByTestId(
     "fb-link-query-users/dev/sample-data/sales-2025.csv"
   );
   await expect(queryLink).toBeVisible({ timeout: 5_000 });
-
   await queryLink.click();
   await expect(page).toHaveURL(/\/query/);
 
-  // The active tab's editor got prefilled with SELECT * FROM ... LIMIT 100.
-  await expect(
-    page.locator(".query-main:not(.is-hidden) .view-lines")
-  ).toContainText("workspace_dev_user.sales_2025", { timeout: 5_000 });
+  // A NEW tab was opened (count +1), carrying the prefilled SELECT.
+  await expect(page.locator(".tabstrip-item")).toHaveCount(tabCountBefore + 1, {
+    timeout: 5_000,
+  });
+  await expect(activeLines()).toContainText("workspace_dev_user.sales_2025", {
+    timeout: 5_000,
+  });
+
+  // The prior tab's in-flight draft must still be there — swap back.
+  const tabs = page.locator(".tabstrip-item");
+  await tabs.nth(0).getByTestId(/^tab-pick-/).click();
+  await expect(activeLines()).toContainText("WIP_DRAFT");
+  await expect(activeLines()).not.toContainText("workspace_dev_user.sales_2025");
 });

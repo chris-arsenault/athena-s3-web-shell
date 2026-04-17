@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import type { HistoryEntry, SavedQuery } from "@athena-shell/shared";
@@ -10,33 +10,37 @@ import { HistoryPanel } from "./HistoryPanel";
 import { SavedQueriesPanel } from "./SavedQueriesPanel";
 import { SchemaTree } from "./SchemaTree";
 import { ScratchpadPanel } from "./ScratchpadPanel";
-import { TabPane } from "./TabPane";
+import { TabPane, type ActiveTabHandle } from "./TabPane";
 import { TabStrip } from "./TabStrip";
-import { useTabs, type Tab } from "./useTabs";
+import { useTabs, type Tab, type UseTabs } from "./useTabs";
 import "./QueryView.css";
 
-type SavedSignalSetter = React.Dispatch<
-  React.SetStateAction<{ queryId: string; sql: string } | null>
->;
+// Module-scoped so StrictMode's double-invoke of the mount effect
+// doesn't duplicate the prefill tab — both invocations share the
+// same consumption set.
+const consumedPrefillTokens = new Set<string>();
 
-function usePrefillTableParam(
-  ready: boolean,
-  setSavedSignal: SavedSignalSetter
-): void {
+function usePrefillTableParam(ready: boolean, tabsApi: UseTabs): void {
   const [params, setParams] = useSearchParams();
   useEffect(() => {
     if (!ready) return;
     const prefill = params.get("prefillTable");
     if (!prefill) return;
-    setSavedSignal({
-      queryId: `prefill-${prefill}-${Date.now()}`,
-      sql: `SELECT * FROM ${prefill} LIMIT 100`,
-    });
+    if (consumedPrefillTokens.has(prefill)) return;
+    consumedPrefillTokens.add(prefill);
+    // Cap the set so a long session doesn't leak.
+    if (consumedPrefillTokens.size > 64) {
+      const first = consumedPrefillTokens.values().next().value;
+      if (first !== undefined) consumedPrefillTokens.delete(first);
+    }
+    // Open a NEW tab so an unsaved draft in the active tab isn't
+    // clobbered by a crosslink.
+    tabsApi.newTabWithSql(`SELECT * FROM ${prefill} LIMIT 100`, prefill);
     // Scrub the param so a reload doesn't keep re-firing the prefill.
     const next = new URLSearchParams(params);
     next.delete("prefillTable");
     setParams(next, { replace: true });
-  }, [ready, params, setParams, setSavedSignal]);
+  }, [ready, params, setParams, tabsApi]);
 }
 
 export function QueryView() {
@@ -46,23 +50,24 @@ export function QueryView() {
 function QueryViewInner() {
   const { provider, context, loading } = useAuth();
   const tabsApi = useTabs();
-  const [savedSignal, setSavedSignal] =
-    useState<{ queryId: string; sql: string } | null>(null);
-  const [historySignal, setHistorySignal] =
-    useState<{ executionId: string; sql: string } | null>(null);
   const [savedKey, setSavedKey] = useState(0);
   const [scratchpadKey, setScratchpadKey] = useState(0);
-  usePrefillTableParam(tabsApi.ready, setSavedSignal);
+  // Imperative handle published by the active TabPane — parent calls
+  // through this for one-shot SQL replacement (saved-query pick,
+  // history select). No state = no stale signal re-firing on tab
+  // switch.
+  const activeHandleRef = useRef<ActiveTabHandle | null>(null);
+  usePrefillTableParam(tabsApi.ready, tabsApi);
 
   if (loading || !context || !tabsApi.ready) {
     return <LoadingSpinner label="query workspace" />;
   }
 
   const onPickSaved = (q: SavedQuery) => {
-    setSavedSignal({ queryId: q.id + "-" + Date.now(), sql: q.sql });
+    activeHandleRef.current?.replaceSql(q.sql);
   };
   const onSelectHistory = (e: HistoryEntry) => {
-    setHistorySignal({ executionId: e.executionId + "-" + Date.now(), sql: e.sql });
+    activeHandleRef.current?.replaceSql(e.sql);
   };
   const onOpenScratchpad = async (key: string, name: string) => {
     const { content, etag } = await readScratchpad(provider, context, key);
@@ -100,8 +105,7 @@ function QueryViewInner() {
               tab={tab}
               hidden={tab.id !== tabsApi.activeId}
               onPatch={(patch: Partial<Tab>) => tabsApi.patchTab(tab.id, patch)}
-              onPickSavedSignal={tab.id === tabsApi.activeId ? savedSignal : null}
-              onHistorySignal={tab.id === tabsApi.activeId ? historySignal : null}
+              activeHandleRef={activeHandleRef}
               onSavedQueryCreated={() => setSavedKey((k) => k + 1)}
               onScratchpadSaved={() => setScratchpadKey((k) => k + 1)}
             />

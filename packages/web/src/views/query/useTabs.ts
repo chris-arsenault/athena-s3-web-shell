@@ -25,6 +25,7 @@ export interface UseTabs {
   ready: boolean;
   setActive: (id: string) => void;
   newTab: () => Tab;
+  newTabWithSql: (sql?: string, name?: string) => Tab;
   closeTab: (id: string) => void;
   renameTab: (id: string, name: string) => void;
   patchTab: (id: string, patch: Partial<Tab>) => void;
@@ -38,10 +39,10 @@ export function useTabs(): UseTabs {
   const writeTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
-    let cancelled = false;
-    void hydrate(cancelled, setTabs, setActiveId, setReady);
+    const tok = { cancelled: false };
+    void hydrate(tok, setTabs, setActiveId, setReady);
     return () => {
-      cancelled = true;
+      tok.cancelled = true;
     };
   }, []);
 
@@ -50,16 +51,11 @@ export function useTabs(): UseTabs {
     void session.set(SESSION_ACTIVE_KEY, id);
   }, []);
 
-  const newTab = useCallback((): Tab => {
-    let created = newTabRecord(0);
-    setTabs((prev) => {
-      created = newTabRecord(prev.length);
-      void tabsStore.upsert(created);
-      return [...prev, created];
-    });
-    setActive(created.id);
-    return created;
-  }, [setActive]);
+  const newTabWithSql = useCallback(
+    (sql?: string, name?: string): Tab => appendTab(setTabs, setActive, sql, name),
+    [setActive]
+  );
+  const newTab = useCallback((): Tab => newTabWithSql(), [newTabWithSql]);
 
   const closeTab = useCallback(
     (id: string) => setTabs((prev) => closeFromList(prev, id, activeId, setActiveId)),
@@ -104,11 +100,41 @@ export function useTabs(): UseTabs {
     ready,
     setActive,
     newTab,
+    newTabWithSql,
     closeTab,
     renameTab,
     patchTab,
     openScratchpad,
   };
+}
+
+function appendTab(
+  setTabs: React.Dispatch<React.SetStateAction<Tab[]>>,
+  setActive: (id: string) => void,
+  sql?: string,
+  name?: string
+): Tab {
+  // Generate the record (including its id) OUTSIDE the updater so
+  // `setActive(record.id)` sees the real id even if React defers the
+  // updater. The updater re-computes `order` and `name` from `prev`
+  // (those need to see the latest prev), then persists + appends.
+  const base = newTabRecord(0);
+  const record: Tab = {
+    ...base,
+    sql: sql ?? base.sql,
+    name: name ?? base.name,
+  };
+  setTabs((prev) => {
+    const finalized: Tab = {
+      ...record,
+      order: prev.length,
+      name: name ?? `Query ${prev.length + 1}`,
+    };
+    void tabsStore.upsert(finalized);
+    return [...prev, finalized];
+  });
+  setActive(record.id);
+  return record;
 }
 
 function openOrReuseScratchpadTab(
@@ -131,22 +157,29 @@ function openOrReuseScratchpadTab(
   return { next: [...prev, tab], tab };
 }
 
+interface CancelTok {
+  cancelled: boolean;
+}
+
 async function hydrate(
-  cancelled: boolean,
+  tok: CancelTok,
   setTabs: (t: Tab[]) => void,
   setActiveId: (id: string | null) => void,
   setReady: (b: boolean) => void
 ): Promise<void> {
   const loaded = await tabsStore.list();
-  if (cancelled) return;
+  if (tok.cancelled) return;
   if (loaded.length === 0) {
     const first = newTabRecord(0);
     await tabsStore.upsert(first);
+    if (tok.cancelled) return;
     await session.set(SESSION_ACTIVE_KEY, first.id);
+    if (tok.cancelled) return;
     setTabs([first]);
     setActiveId(first.id);
   } else {
     const storedActive = await session.get(SESSION_ACTIVE_KEY);
+    if (tok.cancelled) return;
     const active =
       storedActive && loaded.some((t) => t.id === storedActive)
         ? storedActive

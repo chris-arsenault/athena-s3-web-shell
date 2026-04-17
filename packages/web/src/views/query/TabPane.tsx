@@ -13,12 +13,21 @@ import { selectedError, useQueryViewState } from "./useQueryViewState";
 import type { Tab } from "./useTabs";
 import { SqlEditor } from "./SqlEditor";
 
+export interface ActiveTabHandle {
+  replaceSql: (sql: string) => void;
+}
+
+export type ActiveHandleSlot = { current: ActiveTabHandle | null };
+
 interface Props {
   tab: Tab;
   hidden: boolean;
   onPatch: (patch: Partial<Tab>) => void;
-  onPickSavedSignal: { queryId: string; sql: string } | null;
-  onHistorySignal: { executionId: string; sql: string } | null;
+  /** The active tab registers its imperative handle here so parent
+   *  handlers (e.g. "pick saved query" / "select from history") can
+   *  drive the correct editor without flowing through leaky
+   *  signal-as-state. Inactive tabs never register. */
+  activeHandleRef: ActiveHandleSlot;
   onSavedQueryCreated: () => void;
   onScratchpadSaved: () => void;
 }
@@ -29,7 +38,8 @@ export function TabPane(props: Props) {
   const s = useQueryViewState({ provider, initialSql: tab.sql });
   const [saveError, setSaveError] = useState<string | null>(null);
   const cursorOffsetRef = useRef<number>(0);
-  useTabSync(s, tab, hidden, onPatch, props.onPickSavedSignal, props.onHistorySignal);
+  useTabSync(s, tab, onPatch);
+  useActiveHandleRegistration(hidden, s.replaceSql, props.activeHandleRef);
   const onScratchpadSave = useScratchpadSave(tab, s, onPatch, setSaveError, props.onScratchpadSaved);
   const onSaved = useCallback(() => {
     s.setSaveOpen(false);
@@ -101,24 +111,36 @@ type S = ReturnType<typeof useQueryViewState>;
 function useTabSync(
   s: S,
   tab: Tab,
-  hidden: boolean,
-  onPatch: (patch: Partial<Tab>) => void,
-  pickSignal: { queryId: string; sql: string } | null,
-  historySignal: { executionId: string; sql: string } | null
+  onPatch: (patch: Partial<Tab>) => void
 ): void {
   useEffect(() => {
     if (s.sql !== tab.sql) onPatch({ sql: s.sql });
   }, [s.sql, tab.sql, onPatch]);
   useEffect(() => {
-    if (pickSignal && !hidden) s.replaceSql(pickSignal.sql);
-  }, [pickSignal?.queryId]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (historySignal && !hidden) s.replaceSql(historySignal.sql);
-  }, [historySignal?.executionId]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
     const execId = s.selected?.executionId;
     if (execId && execId !== tab.lastExecutionId) onPatch({ lastExecutionId: execId });
   }, [s.selected?.executionId, tab.lastExecutionId, onPatch]);
+}
+
+/**
+ * While this pane is active, publish its imperative handle on the
+ * shared ref so the parent's saved-query / history pickers can
+ * replace THIS tab's SQL without relying on leaky signal state that
+ * re-fires on unrelated tab switches.
+ */
+function useActiveHandleRegistration(
+  hidden: boolean,
+  replaceSql: (sql: string) => void,
+  handleRef: ActiveHandleSlot
+): void {
+  useEffect(() => {
+    if (hidden) return;
+    const handle: ActiveTabHandle = { replaceSql };
+    handleRef.current = handle;
+    return () => {
+      if (handleRef.current === handle) handleRef.current = null;
+    };
+  }, [hidden, replaceSql, handleRef]);
 }
 
 function useScratchpadSave(
