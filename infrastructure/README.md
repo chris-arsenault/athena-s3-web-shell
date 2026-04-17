@@ -113,7 +113,7 @@ The proxy + SPA app code needed to run against this IaC is **already in the repo
 - `packages/web/src/views/auth/CallbackView.tsx` + `/auth/callback` route — completes the OIDC code exchange.
 - `docker/Dockerfile` — accepts the `VITE_AUTH_PROVIDER` + 5 `VITE_COGNITO_*` build args so the SPA bundle is baked with the right config.
 
-See `FOLLOWUP.md` for the small list of remaining polish items (token refresh, signed-out UX, end-to-end smoke).
+Remaining post-deploy polish items (token refresh, signed-out UX, Entra federation) live in [`../docs/ROADMAP.md`](../docs/ROADMAP.md) §E.
 
 ## Defense-in-depth against silent-mock deployment
 
