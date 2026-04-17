@@ -1,13 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 import type { S3Object } from "@athena-shell/shared";
 
-import { useAuth } from "../../auth/authContext";
-import { getObjectRange, type RangeFetch } from "../../data/s3Repo";
 import { formatBytes } from "../../utils/formatBytes";
+import { previewKind, type PreviewKind } from "../../utils/previewable";
+import { ImagePreview } from "./ImagePreview";
+import { JsonTreePreview } from "./JsonTreePreview";
+import { ParquetPreview } from "./ParquetPreview";
+import { TablePreview } from "./TablePreview";
+import { TextPreview } from "./TextPreview";
 import "./FilePreview.css";
-
-const PREVIEW_BYTES = 1_048_576;
 
 interface Props {
   file: S3Object;
@@ -15,34 +17,8 @@ interface Props {
 }
 
 export function FilePreview({ file, onClose }: Props) {
-  const { provider, context } = useAuth();
-  const [content, setContent] = useState<RangeFetch | null>(null);
-  const [error, setError] = useState<Error | null>(null);
-
-  useEffect(() => {
-    if (!context) return;
-    let cancelled = false;
-    setContent(null);
-    setError(null);
-    getObjectRange(provider, context, file.key, PREVIEW_BYTES)
-      .then((c) => {
-        if (!cancelled) setContent(c);
-      })
-      .catch((e: Error) => {
-        if (!cancelled) setError(e);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [provider, context, file.key]);
-
-  useEffect(() => {
-    const handle = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handle);
-    return () => window.removeEventListener("keydown", handle);
-  }, [onClose]);
+  const kind = previewKind(file.name);
+  useEscClose(onClose);
 
   return (
     <div className="fp-backdrop">
@@ -53,41 +29,40 @@ export function FilePreview({ file, onClose }: Props) {
         aria-label={`Preview of ${file.name}`}
         data-testid="fp-drawer"
       >
-        <PreviewHeader file={file} onClose={onClose} truncated={!!content?.truncated} />
-        <div className="fp-body">
-          {error && <ErrorPanel message={error.message} />}
-          {!error && !content && <LoadingPanel />}
-          {!error && content && <PreviewBody text={content.text} />}
+        <PreviewHeader file={file} kind={kind} onClose={onClose} />
+        <div className="fp-body" data-testid={`fp-body-${kind}`}>
+          <KindDispatch file={file} kind={kind} />
         </div>
-        {content?.truncated && (
-          <div className="fp-foot">
-            <span className="tok tok-warn">cap</span>
-            <span className="mono">
-              showing first {formatBytes(PREVIEW_BYTES)} of{" "}
-              {formatBytes(content.totalSize)} · download for the full file
-            </span>
-          </div>
-        )}
       </div>
     </div>
   );
 }
 
-interface HeaderProps {
-  file: S3Object;
-  onClose: () => void;
-  truncated: boolean;
+function KindDispatch({ file, kind }: { file: S3Object; kind: PreviewKind }) {
+  if (kind === "image") return <ImagePreview file={file} />;
+  if (kind === "csv") return <TablePreview file={file} delimiter="," />;
+  if (kind === "tsv") return <TablePreview file={file} delimiter="\t" />;
+  if (kind === "jsonl") return <TablePreview file={file} delimiter={null} />;
+  if (kind === "json") return <JsonTreePreview file={file} />;
+  if (kind === "parquet") return <ParquetPreview file={file} />;
+  if (kind === "text") return <TextPreview file={file} />;
+  return <ErrorPanel message={`No preview for ${file.name}`} />;
 }
 
-function PreviewHeader({ file, onClose, truncated }: HeaderProps) {
+function PreviewHeader({
+  file,
+  kind,
+  onClose,
+}: {
+  file: S3Object;
+  kind: PreviewKind;
+  onClose: () => void;
+}) {
   return (
     <div className="fp-head">
-      <div className="fp-head-tok tok tok-accent">preview</div>
+      <div className="fp-head-tok tok tok-accent">{headerLabel(kind)}</div>
       <div className="fp-head-name mono truncate">{file.name}</div>
-      <div className="fp-head-meta mono text-dim">
-        {formatBytes(file.size)}
-        {truncated && " · partial"}
-      </div>
+      <div className="fp-head-meta mono text-dim">{formatBytes(file.size)}</div>
       <button className="fp-close" onClick={onClose} aria-label="Close preview">
         [ X ]
       </button>
@@ -95,21 +70,44 @@ function PreviewHeader({ file, onClose, truncated }: HeaderProps) {
   );
 }
 
-function PreviewBody({ text }: { text: string }) {
-  const lines = text.length === 0 ? [""] : text.split("\n");
+function headerLabel(kind: PreviewKind): string {
+  switch (kind) {
+    case "image":
+      return "image";
+    case "csv":
+    case "tsv":
+      return "table";
+    case "jsonl":
+      return "jsonl";
+    case "json":
+      return "json";
+    case "parquet":
+      return "parquet";
+    default:
+      return "preview";
+  }
+}
+
+function useEscClose(onClose: () => void): void {
+  useEffect(() => {
+    const handle = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handle);
+    return () => window.removeEventListener("keydown", handle);
+  }, [onClose]);
+}
+
+export function ErrorPanel({ message }: { message: string }) {
   return (
-    <div className="fp-pre" role="document">
-      {lines.map((line, i) => (
-        <div key={i} className="fp-line">
-          <span className="fp-lineno mono tnum">{i + 1}</span>
-          <span className="fp-linetext mono">{line.length === 0 ? " " : line}</span>
-        </div>
-      ))}
+    <div className="fp-status fp-status-error mono">
+      <span className="tok tok-danger">fault</span>
+      <span className="fp-error-msg">{message}</span>
     </div>
   );
 }
 
-function LoadingPanel() {
+export function LoadingPanel() {
   return (
     <div className="fp-status mono">
       <span className="dot" aria-hidden /> fetching content…
@@ -117,11 +115,41 @@ function LoadingPanel() {
   );
 }
 
-function ErrorPanel({ message }: { message: string }) {
+interface RawToggleProps {
+  raw: boolean;
+  onChange: (raw: boolean) => void;
+  rawLabel?: string;
+  parsedLabel: string;
+}
+
+export function RawToggle({ raw, onChange, rawLabel = "raw", parsedLabel }: RawToggleProps) {
   return (
-    <div className="fp-status fp-status-error mono">
-      <span className="tok tok-danger">fault</span>
-      <span className="fp-error-msg">{message}</span>
+    <div className="fp-toggle" data-testid="fp-raw-toggle">
+      <button
+        className={`fp-toggle-btn ${!raw ? "is-active" : ""}`}
+        onClick={() => onChange(false)}
+      >
+        {parsedLabel}
+      </button>
+      <button
+        className={`fp-toggle-btn ${raw ? "is-active" : ""}`}
+        onClick={() => onChange(true)}
+      >
+        {rawLabel}
+      </button>
+    </div>
+  );
+}
+
+interface FallbackChipProps {
+  message: string;
+}
+
+export function ParseErrorChip({ message }: FallbackChipProps) {
+  return (
+    <div className="fp-parse-err mono text-muted">
+      <span className="tok tok-warn">parse</span>
+      <span>{message} — showing raw</span>
     </div>
   );
 }

@@ -9,12 +9,51 @@ interface StoredObject {
   body: Blob | ArrayBuffer | string;
 }
 
+// A minimal 1×1 transparent PNG (smallest valid encoding).
+const TINY_PNG_BYTES = new Uint8Array([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+  0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+  0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
+  0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae,
+  0x42, 0x60, 0x82,
+]);
+
 const seed = (): StoredObject[] => [
   {
     key: "users/dev/welcome.txt",
     size: 42,
     lastModified: "2026-04-15T12:00:00Z",
     body: "Welcome to athena-shell\nDrag files here to upload.\n",
+  },
+  {
+    key: "users/dev/config.json",
+    size: 80,
+    lastModified: "2026-04-13T10:00:00Z",
+    body: '{"name":"athena-shell","version":"0.1.0","flags":{"multiStmt":true,"savedQueries":true}}',
+  },
+  {
+    key: "users/dev/events.jsonl",
+    size: 120,
+    lastModified: "2026-04-13T11:00:00Z",
+    body:
+      '{"id":1,"level":"info","msg":"boot"}\n{"id":2,"level":"warn","msg":"slow"}\n{"id":3,"level":"error","msg":"failed"}',
+  },
+  {
+    key: "users/dev/pixel.png",
+    size: TINY_PNG_BYTES.byteLength,
+    lastModified: "2026-04-13T12:00:00Z",
+    body: TINY_PNG_BYTES.buffer.slice(
+      TINY_PNG_BYTES.byteOffset,
+      TINY_PNG_BYTES.byteOffset + TINY_PNG_BYTES.byteLength
+    ),
+  },
+  {
+    key: "users/dev/not-really.parquet",
+    size: 8,
+    lastModified: "2026-04-13T13:00:00Z",
+    // Not a real parquet — just enough to exercise the dispatch and let
+    // the UI render the "failed to parse" error path.
+    body: new Uint8Array([0x50, 0x41, 0x52, 0x31, 0, 0, 0, 0]).buffer,
   },
   {
     key: "users/dev/sample-data/sales-2025.csv",

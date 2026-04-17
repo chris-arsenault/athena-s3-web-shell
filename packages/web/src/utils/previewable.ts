@@ -1,8 +1,14 @@
-// Extensions whose bytes can be decoded as UTF-8 and meaningfully shown
-// in the preview drawer. Binary formats (parquet, zip, png, …) are off-
-// list even though they might fall under fileTypeIcon's `data`/`image`
-// kinds — we don't want to splat non-text bytes into a <pre>.
-const TEXT_EXTENSIONS = new Set([
+export type PreviewKind =
+  | "text"
+  | "image"
+  | "csv"
+  | "tsv"
+  | "jsonl"
+  | "json"
+  | "parquet"
+  | "none";
+
+const TEXT_EXT = new Set([
   "txt",
   "md",
   "log",
@@ -15,11 +21,6 @@ const TEXT_EXTENSIONS = new Set([
   "yaml",
   "yml",
   "toml",
-  "json",
-  "jsonl",
-  "ndjson",
-  "csv",
-  "tsv",
   "html",
   "css",
   "sh",
@@ -28,7 +29,24 @@ const TEXT_EXTENSIONS = new Set([
   "xml",
 ]);
 
+const IMAGE_EXT = new Set(["png", "jpg", "jpeg", "gif", "webp"]);
+
+export function previewKind(name: string): PreviewKind {
+  const ext = extOf(name);
+  if (IMAGE_EXT.has(ext)) return "image";
+  if (ext === "csv") return "csv";
+  if (ext === "tsv") return "tsv";
+  if (ext === "jsonl" || ext === "ndjson") return "jsonl";
+  if (ext === "json") return "json";
+  if (ext === "parquet") return "parquet";
+  if (TEXT_EXT.has(ext)) return "text";
+  return "none";
+}
+
 export function isPreviewable(name: string): boolean {
-  const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  return TEXT_EXTENSIONS.has(ext);
+  return previewKind(name) !== "none";
+}
+
+function extOf(name: string): string {
+  return name.split(".").pop()?.toLowerCase() ?? "";
 }

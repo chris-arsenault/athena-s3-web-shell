@@ -172,6 +172,91 @@ export interface RangeFetch {
   totalSize: number;
 }
 
+export async function getObjectSize(
+  provider: AuthProvider,
+  ctx: AuthContext,
+  key: string
+): Promise<number> {
+  ensureScoped(ctx, key);
+  if (provider.isMock()) {
+    const blob = await mockS3.get(key);
+    return blob.size;
+  }
+  const client = clientFor(provider, ctx);
+  const out = await client.send(
+    new GetObjectCommand({ Bucket: ctx.s3.bucket, Key: key, Range: "bytes=0-0" })
+  );
+  await out.Body!.transformToByteArray();
+  const total = parseContentRangeTotal(out.ContentRange);
+  if (total === null) throw new Error(`Missing Content-Range on ${key}`);
+  return total;
+}
+
+export async function getObjectBlob(
+  provider: AuthProvider,
+  ctx: AuthContext,
+  key: string
+): Promise<Blob> {
+  ensureScoped(ctx, key);
+  if (provider.isMock()) return mockS3.get(key);
+  const client = clientFor(provider, ctx);
+  const out = await client.send(new GetObjectCommand({ Bucket: ctx.s3.bucket, Key: key }));
+  const bytes = await out.Body!.transformToByteArray();
+  return new Blob([
+    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+  ]);
+}
+
+export async function getObjectBytes(
+  provider: AuthProvider,
+  ctx: AuthContext,
+  key: string,
+  start: number,
+  endExclusive: number
+): Promise<ArrayBuffer> {
+  ensureScoped(ctx, key);
+  if (provider.isMock()) {
+    const blob = await mockS3.get(key);
+    const buf = await blob.arrayBuffer();
+    return buf.slice(start, Math.min(endExclusive, buf.byteLength));
+  }
+  const client = clientFor(provider, ctx);
+  const out = await client.send(
+    new GetObjectCommand({
+      Bucket: ctx.s3.bucket,
+      Key: key,
+      Range: `bytes=${start}-${endExclusive - 1}`,
+    })
+  );
+  const arr = await out.Body!.transformToByteArray();
+  return arr.buffer.slice(arr.byteOffset, arr.byteOffset + arr.byteLength) as ArrayBuffer;
+}
+
+export async function getObjectTail(
+  provider: AuthProvider,
+  ctx: AuthContext,
+  key: string,
+  bytes: number
+): Promise<ArrayBuffer> {
+  ensureScoped(ctx, key);
+  if (provider.isMock()) {
+    const blob = await mockS3.get(key);
+    const buf = await blob.arrayBuffer();
+    const start = Math.max(0, buf.byteLength - bytes);
+    return buf.slice(start);
+  }
+  const client = clientFor(provider, ctx);
+  const out = await client.send(
+    new GetObjectCommand({
+      Bucket: ctx.s3.bucket,
+      Key: key,
+      Range: `bytes=-${bytes}`,
+    })
+  );
+  const arr = await out.Body!.transformToByteArray();
+  return arr.buffer.slice(arr.byteOffset, arr.byteOffset + arr.byteLength) as ArrayBuffer;
+}
+
 export async function getObjectRange(
   provider: AuthProvider,
   ctx: AuthContext,
