@@ -17,9 +17,14 @@ interface Props {
   status: QueryStatus | null;
   loadingMore?: boolean;
   onLoadMore?: () => void;
+  onHeaderFilterClick?: (column: string, anchor: DOMRect) => void;
+  activeFilterColumns?: ReadonlySet<string>;
+  header?: React.ReactNode;
+  draggableHeaders?: boolean;
 }
 
-export function ResultsTable({ results, status, loadingMore, onLoadMore }: Props) {
+export function ResultsTable(props: Props) {
+  const { results, status, loadingMore, onLoadMore } = props;
   if (!results) {
     return (
       <div className="results-empty">
@@ -36,7 +41,14 @@ export function ResultsTable({ results, status, loadingMore, onLoadMore }: Props
   return (
     <div className="results flex-col flex-1">
       <ResultsMeta results={results} status={status} />
-      <VirtualTable rows={results.rows} columns={results.columns} />
+      {props.header}
+      <VirtualTable
+        rows={results.rows}
+        columns={results.columns}
+        onHeaderFilterClick={props.onHeaderFilterClick}
+        activeFilterColumns={props.activeFilterColumns}
+        draggableHeaders={props.draggableHeaders}
+      />
       <ResultsFoot
         rowCount={results.rows.length}
         hasMore={hasMore}
@@ -139,9 +151,18 @@ const DEFAULT_VIEWPORT = 480;
 interface VirtualTableProps {
   columns: ResultColumn[];
   rows: string[][];
+  onHeaderFilterClick?: (column: string, anchor: DOMRect) => void;
+  activeFilterColumns?: ReadonlySet<string>;
+  draggableHeaders?: boolean;
 }
 
-function VirtualTable({ columns, rows }: VirtualTableProps) {
+function VirtualTable({
+  columns,
+  rows,
+  onHeaderFilterClick,
+  activeFilterColumns,
+  draggableHeaders,
+}: VirtualTableProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(DEFAULT_VIEWPORT);
@@ -176,10 +197,13 @@ function VirtualTable({ columns, rows }: VirtualTableProps) {
       <div className="vt-head" style={{ gridTemplateColumns: gridTemplate }}>
         <div className="vt-th vt-th-idx" />
         {columns.map((c) => (
-          <div key={c.name} className="vt-th">
-            <span className="vt-th-name">{c.name}</span>
-            <span className="vt-th-type">{c.type}</span>
-          </div>
+          <ColumnHeader
+            key={c.name}
+            column={c}
+            active={activeFilterColumns?.has(c.name) ?? false}
+            onFilterClick={onHeaderFilterClick}
+            draggable={draggableHeaders}
+          />
         ))}
       </div>
       {/* eslint-disable-next-line local/no-inline-styles */}
@@ -229,6 +253,44 @@ function Stat({ label, value, format, suffix }: StatProps) {
         {suffix && <span className="stat-suffix mono">{suffix}</span>}
       </span>
       <span className="stat-label tracked">{label}</span>
+    </div>
+  );
+}
+
+interface ColumnHeaderProps {
+  column: ResultColumn;
+  active: boolean;
+  onFilterClick?: (column: string, anchor: DOMRect) => void;
+  draggable?: boolean;
+}
+
+function ColumnHeader({ column, active, onFilterClick, draggable }: ColumnHeaderProps) {
+  return (
+    <div
+      className={`vt-th ${active ? "is-filtered" : ""}`}
+      draggable={draggable}
+      onDragStart={(e) => {
+        if (draggable) {
+          e.dataTransfer.setData("text/column", column.name);
+          e.dataTransfer.effectAllowed = "copy";
+        }
+      }}
+    >
+      <span className="vt-th-name">{column.name}</span>
+      <span className="vt-th-type">{column.type}</span>
+      {onFilterClick && (
+        <button
+          className={`vt-th-filter ${active ? "is-active" : ""}`}
+          aria-label={`filter ${column.name}`}
+          data-testid={`vt-filter-${column.name}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onFilterClick(column.name, e.currentTarget.getBoundingClientRect());
+          }}
+        >
+          ⏷
+        </button>
+      )}
     </div>
   );
 }

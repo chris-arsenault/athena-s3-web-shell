@@ -6,7 +6,7 @@ import { LoadingSpinner } from "../../components/LoadingSpinner";
 import { SchemaProvider } from "../../data/schemaContext";
 import { HistoryPanel } from "./HistoryPanel";
 import { QueryToolbar } from "./QueryToolbar";
-import { ResultsTable } from "./ResultsTable";
+import { ResultsPane } from "./ResultsPane";
 import { RunQueuePanel } from "./RunQueuePanel";
 import { SaveQueryModal } from "./SaveQueryModal";
 import { SavedQueriesPanel } from "./SavedQueriesPanel";
@@ -63,7 +63,7 @@ function QueryViewInner() {
           onSelect={s.selectQueueItem}
         />
         <ErrorBanner error={selectedError(s.selected)} onDismiss={noop} />
-        <ResultsTable
+        <ResultsPane
           results={s.displayResults}
           status={s.displayStatus}
           loadingMore={s.loadingMore}

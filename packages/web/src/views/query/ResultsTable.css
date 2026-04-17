@@ -98,14 +98,57 @@
 }
 
 .vt-th {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 1px;
-  padding: 6px 14px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 6px;
+  padding: 6px 10px 6px 14px;
   border-right: 1px solid var(--color-border);
   overflow: hidden;
   line-height: 1.1;
+  position: relative;
+}
+
+.vt-th.is-filtered::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--blueprint-500);
+  opacity: 0.7;
+}
+
+.vt-th[draggable="true"] {
+  cursor: grab;
+}
+
+.vt-th[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.vt-th-filter {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  background: transparent;
+  border: none;
+  color: var(--color-text-dim);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--r-1);
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+.vt-th-filter:hover {
+  color: var(--rust-400);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.vt-th-filter.is-active {
+  color: var(--blueprint-500);
 }
 
 .vt-th:last-child {

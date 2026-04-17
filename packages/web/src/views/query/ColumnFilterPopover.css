@@ -1,0 +1,87 @@
+.cfp {
+  position: fixed;
+  z-index: 40;
+  width: 260px;
+  max-height: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  background: var(--ink-800);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--r-1);
+  box-shadow: 0 16px 32px -10px rgba(0, 0, 0, 0.6);
+  animation: reveal-in var(--dur-fast) var(--ease-out);
+}
+
+.cfp-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: 10.5px;
+}
+
+.cfp-head .tracked {
+  color: var(--color-text-dim);
+}
+
+.cfp-clear {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+
+.cfp-clear:hover {
+  color: var(--crimson-500);
+}
+
+.cfp-search {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.cfp-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  overflow: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.cfp-item label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px;
+  cursor: pointer;
+  font-size: 11px;
+  border-radius: var(--r-1);
+}
+
+.cfp-item label:hover {
+  background: var(--ink-700);
+}
+
+.cfp-item input[type="checkbox"] {
+  accent-color: var(--rust-500);
+  cursor: pointer;
+}
+
+.cfp-val {
+  flex: 1;
+  min-width: 0;
+  color: var(--bone-200);
+}
+
+.cfp-count {
+  font-size: 10px;
+}

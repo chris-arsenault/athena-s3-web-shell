@@ -1,0 +1,83 @@
+.rpane {
+  flex: 1 1 50%;
+  min-height: 0;
+}
+
+.rpane-bar {
+  align-items: center;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--ink-800);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rpane-bar-slim {
+  padding: 4px 14px;
+}
+
+.rpane-gb {
+  padding: 4px 10px;
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rpane-gb.is-active {
+  border-color: var(--blueprint-500);
+  color: var(--blueprint-500);
+}
+
+.rpane-chips {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.rpane-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 8px;
+  background: rgba(106, 167, 212, 0.12);
+  border: 1px solid rgba(106, 167, 212, 0.3);
+  border-radius: var(--r-1);
+  font-size: 10.5px;
+  color: var(--bone-200);
+}
+
+.rpane-chip-x {
+  background: transparent;
+  border: none;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0 4px;
+}
+
+.rpane-chip-x:hover {
+  color: var(--crimson-500);
+}
+
+.rpane-chip-clear {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.rpane-chip-clear:hover {
+  color: var(--crimson-500);
+}
+
+.rpane-banner {
+  font-size: 10.5px;
+  margin-left: auto;
+  letter-spacing: 0.02em;
+}
