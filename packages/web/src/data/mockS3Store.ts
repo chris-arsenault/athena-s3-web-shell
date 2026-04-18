@@ -82,6 +82,93 @@ const seed = (): StoredObject[] => [
       "1002,2024-02-15,9999999999999999999\n" +
       "1003,2024-00-31,200\n",
   },
+  {
+    key: "users/dev/sample-data/products.csv",
+    size: 620,
+    lastModified: "2026-04-11T14:20:00Z",
+    body:
+      "sku,name,category,list_price,in_stock\n" +
+      "SKU-0001,Widget,hardware,12.50,true\n" +
+      "SKU-0002,Gadget,hardware,34.99,true\n" +
+      "SKU-0003,Sprocket,hardware,7.25,false\n" +
+      "SKU-0004,Manifold,industrial,249.00,true\n" +
+      "SKU-0005,Flange,industrial,89.40,true\n" +
+      "SKU-0006,Coupler,industrial,15.75,true\n" +
+      "SKU-0007,Valve,industrial,62.10,false\n",
+  },
+  {
+    key: "users/dev/sample-data/region-sales.csv",
+    size: 480,
+    lastModified: "2026-04-09T16:45:00Z",
+    body:
+      "region,quarter,revenue_usd,units\n" +
+      "NORTH,2026Q1,184250.00,1420\n" +
+      "SOUTH,2026Q1,92140.50,812\n" +
+      "EAST,2026Q1,156780.25,1290\n" +
+      "WEST,2026Q1,211050.75,1683\n" +
+      "NORTH,2025Q4,172900.00,1385\n" +
+      "SOUTH,2025Q4,88410.50,760\n",
+  },
+  {
+    key: "users/dev/reports/q1-rollup.csv",
+    size: 340,
+    lastModified: "2026-04-08T09:00:00Z",
+    body:
+      "metric,value,delta_pct\n" +
+      "revenue_usd,644221.50,12.4\n" +
+      "orders,5205,8.7\n" +
+      "avg_order_usd,123.77,3.4\n" +
+      "active_customers,1842,15.2\n",
+  },
+  {
+    key: "users/dev/reports/weekly-active.csv",
+    size: 280,
+    lastModified: "2026-04-16T07:15:00Z",
+    body:
+      "week_of,dau_avg,wau,mau\n" +
+      "2026-03-23,1420,6800,22400\n" +
+      "2026-03-30,1485,7120,22910\n" +
+      "2026-04-06,1542,7380,23180\n" +
+      "2026-04-13,1601,7640,23520\n",
+  },
+  {
+    key: "users/dev/exports/",
+    size: 0,
+    lastModified: "2026-04-17T00:00:00Z",
+    body: "",
+  },
+  {
+    key: "users/dev/queries/daily-rollup.sql",
+    size: 380,
+    lastModified: "2026-04-17T14:30:00Z",
+    body:
+      "-- Daily revenue rollup by region.\n" +
+      "-- Usage: set :start_date before running.\n" +
+      "SELECT\n" +
+      "  region,\n" +
+      "  DATE_TRUNC('day', order_date) AS day,\n" +
+      "  COUNT(*) AS orders,\n" +
+      "  SUM(amount) AS revenue_usd\n" +
+      "FROM sales.orders\n" +
+      "WHERE order_date >= DATE '2026-04-01'\n" +
+      "GROUP BY 1, 2\n" +
+      "ORDER BY day DESC, revenue_usd DESC;\n",
+  },
+  {
+    key: "users/dev/queries/cohort-funnel.sql",
+    size: 220,
+    lastModified: "2026-04-14T11:00:00Z",
+    body:
+      "-- Signup → first-order conversion by cohort week.\n" +
+      "SELECT\n" +
+      "  DATE_TRUNC('week', u.created_at) AS cohort,\n" +
+      "  COUNT(DISTINCT u.id) AS signups,\n" +
+      "  COUNT(DISTINCT o.customer_id) AS converted\n" +
+      "FROM default.users u\n" +
+      "LEFT JOIN sales.orders o ON o.customer_id = u.id\n" +
+      "GROUP BY 1\n" +
+      "ORDER BY cohort DESC;\n",
+  },
 ];
 
 class MockS3Store {

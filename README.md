@@ -1,6 +1,13 @@
-# athena-shell
+<h1>
+  <img src="docs/favicon.svg" alt="" width="28" height="28" align="top" />
+  athena-shell
+</h1>
 
 A web shell over AWS Athena and S3 designed for **VPC-bound deployments** — environments where the app must run entirely inside a private network with no internet egress, no API Gateway, no edge CDN. Combines drag-and-drop S3 file management with a friendly SQL interface for querying that data through Athena, all behind a single SSO login.
+
+![athena-shell — query results view](docs/screenshots/06-query-results.png)
+
+See the [**Feature Overview / User Guide**](docs/user-guide.md) for a full walkthrough of the workspace, catalog, scratchpad, saved queries, and journal.
 
 Intentionally a **thin shell over AWS APIs**. Almost no custom business logic — the IAM role does the access control. The differentiator vs. existing free SQL tools is integrated SSO (Cognito federated by Entra ID) and a shape that fits inside network-restricted environments where DBeaver and similar desktop tools can't authenticate or reach the data.
 
@@ -90,6 +97,7 @@ athena-shell/
 
 | Topic | Doc |
 |---|---|
+| Feature overview with screenshots | [docs/user-guide.md](docs/user-guide.md) |
 | System design, deployment, security model | [docs/architecture.md](docs/architecture.md) |
 | Auth model, Cognito flow, credential passthrough | [docs/auth.md](docs/auth.md) |
 | Proxy endpoints, data flow, repo pattern | [docs/api.md](docs/api.md) |
